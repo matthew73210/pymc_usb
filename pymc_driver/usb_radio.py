@@ -911,6 +911,19 @@ class USBLoRaRadio(_RadioBase):
                     if self._event_loop:
                         self._event_loop.call_soon_threadsafe(evt.set)
 
+        elif cmd == CMD_TX_FAIL:
+            # The TX request reached the radio but the chip never asserted
+            # TX_DONE before the firmware's own timeout. Wake up whoever is
+            # blocked on CMD_TX_DONE so the caller doesn't sit on the full
+            # driver timeout.
+            logger.warning("Modem TX_FAIL — radio did not assert TX_DONE")
+            with self._response_lock:
+                evt = self._response_events.get(CMD_TX_DONE)
+                if evt is not None:
+                    self._response_data[CMD_TX_DONE] = None
+                    if self._event_loop:
+                        self._event_loop.call_soon_threadsafe(evt.set)
+
         else:
             # ── Command response ─────────────────────────────
             with self._response_lock:
