@@ -30,8 +30,8 @@
 
 // ─── Version ─────────────────────────────────────────────────
 // Base version is shared by every board; the board's fw_suffix
-// distinguishes one binary from another (e.g. "v0.5.10-ikoka").
-#define FW_VERSION_BASE "v0.5.11"
+// distinguishes one binary from another (e.g. "v0.6.0-ikoka").
+#define FW_VERSION_BASE "v0.6.0"
 static String fwVersion;   // populated in setup()
 
 // ─── Task watchdog — self-heal on loop() hang ───────────────

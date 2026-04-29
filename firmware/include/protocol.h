@@ -1,7 +1,7 @@
 // =============================================================
 // protocol.h — Wire protocol for LoRa Modem serial/TCP communication
-// v0.5.4 — + CMD_SET_CAD_PARAMS / CMD_CAD_PARAMS_RESP
-//          (wire format unchanged; new commands are optional)
+// v0.6 — adds CMD_GET_DEBUG / CMD_DEBUG_RESP and ERR_NO_RADIO;
+//        wire format unchanged.
 // =============================================================
 #pragma once
 

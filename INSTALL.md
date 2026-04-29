@@ -72,68 +72,42 @@ USB and release it once `esptool.py` starts. After flashing press
 
 ```bash
 cd firmware
-
-# Pick the env matching your board:
-pio run -e heltec_v3       -t upload
-pio run -e ikoka_stick     -t upload
-pio run -e lilygo_t3s3     -t upload
-pio run -e rak3112_wismesh -t upload
-pio run -e esp32_p4_nano   -t upload   # uses the pioarduino platform fork
-
-# Refresh the prebuilt binaries under firmware/<env>/ for every env:
-./build_release.sh
+pio run -e <env> -t upload          # USB cable
+./build_release.sh                  # refresh every prebuilt at once
 ```
 
-The XIAO board enters bootloader mode automatically when PlatformIO
-issues the reset; if not, double-tap RESET on the XIAO to enter the
-Adafruit/SAM-DA bootloader, or hold BOOT while plugging USB.
+XIAO ESP32-S3 (Ikoka) sometimes needs a manual bootloader entry —
+double-tap RESET, or hold BOOT while plugging USB. ESP32-P4-Nano
+download mode: hold **BOOT (Key1)**, briefly press **RESET (Key2)**,
+release RESET, release BOOT.
 
-### 1c. OTA update over the network (after the first flash — no cable)
+### 1c. OTA over the network (after the first flash, no cable)
 
-Once the board is provisioned and reachable (Wi-Fi STA or Ethernet)
-via mDNS:
+Once the board is on the LAN (Wi-Fi STA or Ethernet) and visible via mDNS:
 
 ```bash
-# From firmware/, generic form — substitute your env + hostname:
-pio run -e <env> -t upload --upload-port <env-mdns>-<mac3>.local
+cd firmware
+pio run -e <env> -t upload --upload-port <env-stem>-<mac3>.local
+# or HTTP directly:
 curl -F firmware=@.pio/build/<env>/firmware.bin \
-     http://<env-mdns>-<mac3>.local/update
+     http://<env-stem>-<mac3>.local/update
 ```
 
-Examples:
-
-```bash
-pio run -e heltec_v3       -t upload --upload-port heltec-abcdef.local
-pio run -e ikoka_stick     -t upload --upload-port ikoka-abcdef.local
-pio run -e lilygo_t3s3     -t upload --upload-port lilygo-t3s3-abcdef.local
-pio run -e rak3112_wismesh -t upload --upload-port rak3112-abcdef.local
-pio run -e esp32_p4_nano   -t upload --upload-port p4nano-abcdef.local
-```
-
-The board reboots automatically after upload. The old firmware is **not**
-rolled back automatically if the new image is broken — keep the USB cable
-as a fallback for recovery.
+Hostname stems are listed in §1 (e.g. `heltec`, `ikoka`,
+`lilygo-t3s3`, `rak3112`, `p4nano`). The board reboots after upload.
+Rollback is **not** automatic on a broken image — keep the USB cable
+as a recovery fallback.
 
 ### Adding a new board
 
-Drop a new file under `firmware/include/boards/<my_board>.h` modelled on
-the closest existing header, add `-DBOARD_MY_BOARD` to a new env in
+Copy the closest `firmware/include/boards/<env>.h`, edit pins / RF-switch
+policy, add `-DBOARD_MY_BOARD` to a new `[env:my_board]` block in
 `platformio.ini`, and a matching `#elif defined(BOARD_MY_BOARD)` arm in
-`board_config.h`. The rest of the firmware reads everything through
-`BOARD.*` and doesn't need to change.
-
-For a different ESP32-S3 board with a soldered SX1262, copy
-`heltec_v3.h` (no PA, internal RF switch) or `lilygo_t3s3.h`. For an
-E22-P / Ebyte module on a fresh carrier, copy `ikoka_stick.h`. For
-another **ESP32-P4** carrier (RISC-V P4 + C6 SDIO bridge + RMII PHY),
-start from `esp32_p4_nano.h` and read the
-"[Porting to another ESP32-P4 board](README.md#porting-to-another-esp32-p4-board)"
-section in the README — it covers the GPIO35 boot/RMII collision, the
-LDO power domain on high-numbered GPIOs, the C6/esp_hosted RF
-sensitivity (`has_wifi`), the Ethernet PHY config block, and the
-`ARDUINO_USB_CDC_ON_BOOT=0` quirk. Each one was found the hard way on
-the WaveShare reference; the workarounds are baked into the existing
-header.
+`board_config.h`. ESP32-P4 carriers have a few quirks (boot strap on
+GPIO35, RMII / Wi-Fi / radio interaction, LDO domain on high GPIOs)
+covered in the README's
+[Porting to another ESP32-P4 board](README.md#porting-to-another-esp32-p4-board)
+section.
 
 ## 2. USB connection (`pymc_usb` radio type)
 
@@ -384,7 +358,7 @@ Retransmitted packet (X bytes, Yms airtime)   ← mesh forwarding is live
 - **Firmware version:** the STATUS screen shows it after the boot
   splash. Or programmatically:
   ```python
-  await radio.get_version()   # e.g. "v0.5.11-heltec" / "-esp32p4"
+  await radio.get_version()   # e.g. "v0.6.0-heltec" / "-esp32p4"
   ```
 - **OLED screen cycle** (short PRG taps): SLEEP → STATUS → RADIO → DIAGNOSTICS.
   The RADIO screen shows the live chip configuration (freq, SF, BW, CR,
