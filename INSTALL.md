@@ -389,6 +389,30 @@ docker compose up -d --build
 docker compose logs -f
 ```
 
+`docker compose up -d --build` ignores the `image:` line and builds
+locally from `docker/Dockerfile`. To run the published image without
+rebuilding, drop `--build`: `docker compose pull && docker compose up
+-d` will fetch `itkeny/pymc-usb-repeater:latest` from Docker Hub.
+
+### Releasing a new image to Docker Hub (maintainer only)
+
+A GitHub Action at `.github/workflows/docker-publish.yml` builds
+multi-arch (linux/amd64 + linux/arm64) and pushes on every git tag
+starting with `v*`:
+
+```bash
+git tag v0.6.0
+git push origin v0.6.0
+# Action runs ~5 minutes, pushes itkeny/pymc-usb-repeater:v0.6.0
+# and :latest. Watch progress under the repo's Actions tab.
+```
+
+The workflow needs two repo secrets (Settings → Secrets → Actions):
+`DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (a Docker Hub Access Token
+with Read & Write scope, NOT the account password). Manual rebuilds
+without bumping the tag: `Actions → Publish Docker image → Run
+workflow` — pushes only `:latest`.
+
 Dashboard: `http://localhost:8000`. Three host bind mounts under
 `./data/` (relative to the compose file) keep config / database / logs
 on the host filesystem so they survive `docker rm`, can be backed up
