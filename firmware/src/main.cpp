@@ -91,20 +91,11 @@ namespace EthernetManager {
     inline bool hasIP()    { return false; }
     inline const char* getIPString() { return "---"; }
 }
-class OledDisplay {
-public:
-    inline void begin() {}
-    inline void showSplash() {}
-    inline void showStatus(uint32_t, uint32_t, const char*, const char*,
-                           const char*, const char*) {}
-    inline void showRadioConfig(uint32_t, uint32_t, uint8_t, uint8_t,
-                                int8_t, uint16_t, uint8_t, const char*) {}
-    inline void showDiagnostics(uint32_t, const char*, uint32_t, uint32_t,
-                                uint32_t, uint32_t, const char*) {}
-    inline void showError(const char*) {}
-    inline void turnOn()  {}
-    inline void turnOff() {}
-};
+// Real display driver on nRF52: the Heltec T114 ships with an
+// LH114T-IF03 TFT-LCD (ST7789, 135×240). The class name stays
+// `OledDisplay` to keep main.cpp's call sites uniform across
+// boards even though the underlying panel is a TFT.
+#include "tft_display.h"
 // Tiny WiFi.* stand-in — only methods main.cpp actually calls when
 // has_wifi happens to be true; the firmware branches gate them on
 // runtime state which is always false on the T114.

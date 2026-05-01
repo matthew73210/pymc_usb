@@ -10,7 +10,22 @@
 #pragma once
 
 #include <stdint.h>
-#include <pgmspace.h>
+
+// PROGMEM lives in different headers per Arduino core:
+//   * ESP32 / Arduino-ESP32 ships <pgmspace.h>
+//   * Adafruit nRF52 BSP (and most ARM cores) makes PROGMEM a
+//     no-op via <Arduino.h>; <pgmspace.h> isn't shipped.
+// Include the ESP path conditionally; nRF52 falls through to
+// the no-op definition the BSP already provides.
+#if defined(ARDUINO_ARCH_ESP32)
+#  include <pgmspace.h>
+#endif
+#ifndef PROGMEM
+#  define PROGMEM
+#endif
+#ifndef pgm_read_byte
+#  define pgm_read_byte(addr) (*(const uint8_t*)(addr))
+#endif
 
 static constexpr uint8_t SPLASH_LOGO_W = 64;
 static constexpr uint8_t SPLASH_LOGO_H = 64;
