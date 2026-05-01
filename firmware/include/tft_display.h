@@ -7,19 +7,18 @@
 // still called `OledDisplay` even though the underlying panel is
 // a TFT — keeps the name consistent across the firmware family.
 //
-// Hardware (T114-specific, see Datasheet_T114.pdf):
+// Hardware (T114 V2-specific, see Datasheet_T114.pdf and the
+// MeshCore variant in _incoming/MeshCore-main):
 //   * Panel: Heltec LH114T-IF03 — IPS, 135×240, 262 K colours,
 //            Sitronix ST7789V controller, 4-line SPI write-only.
-//   * SPI bus: dedicated SPIM3 peripheral on nRF52, distinct from
-//              the LoRa SPI bus. MOSI = GPIO40, SCLK = GPIO48,
-//              MISO = unused.
-//   * Control: CS = GPIO11, DC/RS = GPIO12, RST = GPIO32.
-//   * Backlight: BL_EN on GPIO19. Heltec wires the same pin to
-//                LoRa SCK on the radio side; during LoRa SPI
-//                activity the backlight gets pulsed (visibly
-//                shimmery), and between SPI transactions the
-//                pin sits at SCK's idle state. Live with it
-//                until a future board rev separates the rail.
+//   * SPI bus: shared with the SX1262 on the default SPI
+//              peripheral (SCK=P0.19, MOSI=P0.22, MISO=P0.23).
+//              CS gates which device gets the burst.
+//   * Control: CS = P0.11, DC/RS = P0.12, RST = P0.02.
+//   * Power gates: VDD_CTL = P0.03 (panel logic rail), LEDA_CTL
+//                  = P0.15 (backlight LED anode). Both must be
+//                  driven HIGH before any draw; pulled LOW in
+//                  turnOff() to save current.
 // =============================================================
 #pragma once
 

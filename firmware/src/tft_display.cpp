@@ -7,6 +7,14 @@
 // On T114 it replaces the SSD1306 oled_display.cpp (which the
 // heltec_t114 env excludes via build_src_filter).
 //
+// The TFT lives on the second hardware SPI peripheral (`SPI1` in
+// the Adafruit BSP — PIN_SPI1_SCK=P1.08, MOSI=P1.09, MISO=P1.11
+// from our variant.h), separate from the SX1262 bus. VDD_CTL and
+// LEDA_CTL are both active-LOW power gates: driving them HIGH
+// turns the panel off (this caught us during bring-up — early
+// firmware drove HIGH thinking they were active-high enables and
+// got a black screen with the radio still working).
+//
 // Public API matches OledDisplay so main.cpp doesn't care which
 // panel lives on the board.
 // =============================================================
@@ -19,27 +27,28 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
 
-// ─── T114 TFT pin map (datasheet pin-map block) ──────────────
-static constexpr int8_t PIN_TFT_CS   = 11;
-static constexpr int8_t PIN_TFT_DC   = 12;   // RS / D-C
-static constexpr int8_t PIN_TFT_RST  = 32;
-static constexpr int8_t PIN_TFT_MOSI = 40;   // SDA
-static constexpr int8_t PIN_TFT_SCLK = 48;   // SCL
-static constexpr int8_t PIN_TFT_BL   = 19;   // shared with LoRa SCK; backlight pulses during SPI activity
+// ─── T114 TFT pin map (variant Heltec_T114_Board) ────────────
+// All Arduino pin indices in the custom variant equal the raw
+// nRF GPIO number, so these constants double as datasheet refs.
+static constexpr int8_t PIN_TFT_RST_GPIO     = 2;   // P0.02
+static constexpr int8_t PIN_TFT_VDD_CTL_GPIO = 3;   // P0.03 — panel logic VDD enable
+static constexpr int8_t PIN_TFT_CS_GPIO      = 11;  // P0.11
+static constexpr int8_t PIN_TFT_DC_GPIO      = 12;  // P0.12
+static constexpr int8_t PIN_TFT_BL_GPIO      = 15;  // P0.15 — backlight LED anode (LEDA_CTL)
 
 // ─── Panel geometry ──────────────────────────────────────────
 // Native ST7789 framebuffer is 240×320; the LH114T-IF03 only
-// exposes a 135-pixel-wide visible window. Adafruit_ST7789
-// `init(135, 240, SPI_MODE0)` configures the controller to clip
-// to that window (with a built-in column-offset of 52 px).
-static constexpr int16_t TFT_W = 135;
-static constexpr int16_t TFT_H = 240;
+// exposes a 135×240 visible window. We render in landscape
+// (rotation=1) — the T114 enclosure is wider than tall when the
+// USB-C port is on the right, and 240×135 leaves room for the
+// 4-line status block without wrapping.
+static constexpr int16_t TFT_W = 240;
+static constexpr int16_t TFT_H = 135;
 
 // ─── Layout constants ────────────────────────────────────────
-// Rotation 0 = portrait (135 wide × 240 tall) — matches the
-// physical orientation of the T114 silk. Header (banner + state
-// tag) sits at the top, body follows top-down. All draw calls
-// use Adafruit_GFX's classic 6×8 font scaled 1× or 2×.
+// Rotation 1 = landscape (240 wide × 135 tall). Header (banner +
+// state tag) sits at the top, body follows top-down. All draw
+// calls use Adafruit_GFX's classic 6×8 font scaled 1× or 2×.
 static constexpr uint16_t COLOUR_BG       = 0x0000;   // black
 static constexpr uint16_t COLOUR_FG       = 0xFFFF;   // white
 static constexpr uint16_t COLOUR_HEADER   = 0x07E0;   // green
@@ -47,19 +56,35 @@ static constexpr uint16_t COLOUR_ACCENT   = 0x07FF;   // cyan
 static constexpr uint16_t COLOUR_WARN     = 0xFD20;   // orange
 static constexpr uint16_t COLOUR_ERR      = 0xF800;   // red
 
-// Adafruit nRF52 BSP: SPIClass(NRF_SPIM_Type*, MISO, MOSI, SCLK).
-// Pass MISO = an unused GPIO so the constructor accepts it; the
-// TFT is write-only and never drives that pin.
-static SPIClass tftSpi(NRF_SPIM3, /*MISO*/ 45, PIN_TFT_MOSI, PIN_TFT_SCLK);
-static Adafruit_ST7789 tft(&tftSpi, PIN_TFT_CS, PIN_TFT_DC, PIN_TFT_RST);
+// Adafruit_ST7789(SPIClass*, CS, DC, RST). Bind to SPI1 — its
+// pins (SCK=40, MOSI=41, MISO=43) are dedicated to the TFT and
+// don't fight with the SX1262 bus on SPI.
+static Adafruit_ST7789 tft(&SPI1, PIN_TFT_CS_GPIO, PIN_TFT_DC_GPIO, PIN_TFT_RST_GPIO);
 
 void OledDisplay::begin() {
-    pinMode(PIN_TFT_BL, OUTPUT);
-    digitalWrite(PIN_TFT_BL, HIGH);    // backlight on (will flicker during LoRa SPI)
+    // VDD_CTL and LEDA_CTL are both ACTIVE-LOW power gates on the
+    // T114 (PMOS high-side switches). Drive LOW to turn the panel
+    // logic and backlight on. RST stays HIGH for normal operation
+    // — Adafruit_ST7789::init() does its own LOW pulse internally.
+    pinMode(PIN_TFT_VDD_CTL_GPIO, OUTPUT);
+    pinMode(PIN_TFT_BL_GPIO, OUTPUT);
+    pinMode(PIN_TFT_RST_GPIO, OUTPUT);
+    digitalWrite(PIN_TFT_VDD_CTL_GPIO, LOW);
+    digitalWrite(PIN_TFT_BL_GPIO, LOW);
+    digitalWrite(PIN_TFT_RST_GPIO, HIGH);
+    delay(10);   // VDD ramp before we hit the controller
 
-    tftSpi.begin();
-    tft.init(TFT_W, TFT_H, SPI_MODE0);
-    tft.setRotation(0);                 // portrait
+    // Bring up the dedicated TFT SPI bus. SX1262 stays on `SPI`,
+    // so this one starts cold and we configure it explicitly.
+    SPI1.begin();
+
+    // init() takes the *native* portrait dimensions (135×240) so
+    // the driver applies the correct column offset (52 px) for
+    // the LH114T-IF03 subwindow; setRotation(1) then rotates into
+    // our preferred landscape orientation.
+    tft.init(135, 240, SPI_MODE0);
+    tft.setRotation(1);                     // landscape, USB-C right
+    tft.setSPISpeed(40000000);              // 40 MHz — same as MeshCore
     tft.fillScreen(COLOUR_BG);
     tft.setTextColor(COLOUR_FG, COLOUR_BG);
     tft.setTextWrap(false);
@@ -241,14 +266,17 @@ void OledDisplay::showError(const char* msg) {
 
 void OledDisplay::turnOff() {
     if (!_ready) return;
-    digitalWrite(PIN_TFT_BL, LOW);
+    // Active-low gates: HIGH disables the rail.
+    digitalWrite(PIN_TFT_BL_GPIO, HIGH);
+    digitalWrite(PIN_TFT_VDD_CTL_GPIO, HIGH);
     tft.enableSleep(true);
 }
 
 void OledDisplay::turnOn() {
     if (!_ready) return;
+    digitalWrite(PIN_TFT_VDD_CTL_GPIO, LOW);
     tft.enableSleep(false);
-    digitalWrite(PIN_TFT_BL, HIGH);
+    digitalWrite(PIN_TFT_BL_GPIO, LOW);
 }
 
 #endif  // BOARD_HELTEC_T114

@@ -169,9 +169,23 @@ static uint8_t cadExitMode = 0x00;  // RADIOLIB_SX126X_CAD_GOTO_STDBY
 
 // ─── Transport state ─────────────────────────────────────────
 static FrameParser serialParser;
+static FrameParser uartParser;        // protocol UART (Serial2 on nRF52)
+static bool        uartEnabled = false;
 static bool        tcpStarted    = false;
 static bool        otaStarted    = false;
 static String      deviceHostname;   // e.g. "heltec-ab12cd" (no .local)
+
+// Hardware UART used for the protocol when BOARD.pin_protocol_uart_*
+// is wired. nRF52 (T114) → Serial2 on the variant's PIN_SERIAL2_*.
+// ESP32 (Arduino-ESP32) doesn't auto-instantiate Serial2 the same
+// way, but every supported ESP32 board in this firmware speaks the
+// protocol over USB-CDC anyway, so we leave the UART path as
+// nRF52-only for now.
+#ifdef ARDUINO_ARCH_ESP32
+#  define PROTO_UART  Serial1
+#else
+#  define PROTO_UART  Serial2
+#endif
 
 // Timing
 static uint32_t lastOledUpdate = 0;
@@ -285,7 +299,7 @@ static void rfSwitchConfigureRadio() {
 
 // ─── Frame output ────────────────────────────────────────────
 static void writeFrame(uint8_t cmd, const uint8_t* payload, uint16_t len,
-                       bool toSerial, bool toTCP) {
+                       bool toSerial, bool toTCP, bool toUart) {
     uint8_t buf[MAX_FRAME_SIZE];
     uint16_t i = 0;
     buf[i++] = PROTO_SYNC;
@@ -311,12 +325,16 @@ static void writeFrame(uint8_t cmd, const uint8_t* payload, uint16_t len,
     if (toTCP) {
         TCPServer::write(buf, i);
     }
+    if (toUart && uartEnabled) {
+        PROTO_UART.write(buf, i);
+    }
 }
 
 void sendFrame(uint8_t cmd, const uint8_t* payload, uint16_t len, TransportSource dest) {
     writeFrame(cmd, payload, len,
                dest == TransportSource::USB,
-               dest == TransportSource::TCP);
+               dest == TransportSource::TCP,
+               dest == TransportSource::UART);
 }
 
 void sendError(uint8_t errCode, TransportSource dest) {
@@ -324,9 +342,13 @@ void sendError(uint8_t errCode, TransportSource dest) {
 }
 
 void broadcastFrame(uint8_t cmd, const uint8_t* payload, uint16_t len) {
+    // Async events (RX_PACKET, TX_DONE, TX_FAIL): fan out to every
+    // active host transport so whichever one the controller is
+    // listening on receives the event.
     writeFrame(cmd, payload, len,
                /*toSerial=*/true,
-               /*toTCP=*/TCPServer::isClientReady());
+               /*toTCP=*/TCPServer::isClientReady(),
+               /*toUart=*/uartEnabled);
 }
 
 // ─── WIFI_STATUS response builder ───────────────────────────
@@ -831,6 +853,27 @@ void setup() {
     }
     delay(200);
 
+    // Optional protocol UART — used by sector-array controllers
+    // that wire the modem over a hard link instead of USB-CDC.
+    // Stays disabled when BOARD.pin_protocol_uart_rx is -1 (every
+    // board except T114 in the current fleet); on T114 the pins
+    // come from the variant's Serial2 (P0.09 / P0.10).
+    if (BOARD.pin_protocol_uart_rx >= 0 && BOARD.pin_protocol_uart_tx >= 0) {
+#ifdef ARDUINO_ARCH_ESP32
+        PROTO_UART.begin(BOARD.protocol_uart_baud, SERIAL_8N1,
+                         BOARD.pin_protocol_uart_rx,
+                         BOARD.pin_protocol_uart_tx);
+#else
+        // nRF52 BSP: pins are baked into Serial2 from variant.h.
+        PROTO_UART.begin(BOARD.protocol_uart_baud);
+#endif
+        uartEnabled = true;
+        Serial.printf("[BOOT] protocol UART up @ %lu baud (rx=%d tx=%d)\n",
+                      (unsigned long)BOARD.protocol_uart_baud,
+                      (int)BOARD.pin_protocol_uart_rx,
+                      (int)BOARD.pin_protocol_uart_tx);
+    }
+
     fwVersion = String(FW_VERSION_BASE) + "-" + BOARD.fw_suffix;
 
     // Print the reason this boot started so we can tell brownouts,
@@ -1063,6 +1106,14 @@ void loop() {
         uint8_t b = (uint8_t)Serial.read();
         frameparser_feed(serialParser, b, TransportSource::USB,
                          onSerialFrameOk, onSerialFrameErr);
+    }
+
+    if (uartEnabled) {
+        while (PROTO_UART.available()) {
+            uint8_t b = (uint8_t)PROTO_UART.read();
+            frameparser_feed(uartParser, b, TransportSource::UART,
+                             onSerialFrameOk, onSerialFrameErr);
+        }
     }
 
     if (tcpStarted) TCPServer::loop();

@@ -8,9 +8,13 @@
 #include <stdint.h>
 
 // Values named USB/TCP (not SERIAL) because Arduino.h defines SERIAL as a macro.
+// UART is the dedicated protocol UART (Serial2 on nRF52, board-mapped pins on
+// ESP32) — used by sector-array controllers that talk to the modem over a
+// hard-wire link instead of USB-CDC.
 enum class TransportSource : uint8_t {
-    USB = 0,
-    TCP = 1,
+    USB  = 0,
+    TCP  = 1,
+    UART = 2,
 };
 
 struct FrameParser {

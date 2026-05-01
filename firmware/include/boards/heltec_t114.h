@@ -7,18 +7,20 @@
 // hardware is present but unused.
 //
 // Pin map confirmed against the Heltec datasheet (Datasheet_T114.pdf
-// in _incoming/) and the Mesh Node T114 v2.0 silk:
+// in _incoming/) cross-referenced with the MeshCore T114 variant
+// (`_incoming/MeshCore-main/variants/heltec_t114/`). All numbers
+// are raw nRF52840 GPIO indices; on T114 the silkscreen "GPIO X"
+// equals P0.X for X<32 and P1.(X-32) for X>=32. Our custom variant
+// (firmware/variants/Heltec_T114_Board/) maps Arduino pin N → raw
+// nRF GPIO N, so these values pass straight through to the SDK.
 //   GPIO 20 — SX1262 DIO1 (IRQ)
 //   GPIO 17 — SX1262 BUSY
 //   GPIO 25 — SX1262 NRESET
-//   GPIO 24 — SX1262 NSS (chip select; not silked in the LoRa
-//              block of the pin map but follows the SPI ordering
-//              and matches the Meshtastic T114 variant.h)
-//   GPIO 19 — SX1262 SCK (also dual-purposes as TFT_LED_EN on
-//              display-equipped variants — SPI traffic is clean
-//              because the LED gate ignores the clock signal)
-//   GPIO 22 — SX1262 MOSI
-//   GPIO 33 — SX1262 MISO
+//   GPIO 24 — SX1262 NSS (chip select)
+//   GPIO 19 — SX1262 SCK (shared with the optional ST7789 TFT)
+//   GPIO 22 — SX1262 MOSI (shared with TFT)
+//   GPIO 23 — SX1262 MISO (TFT is write-only so this stays
+//              dedicated to the radio in practice)
 //
 // Buttons:
 //   GPIO 18 — hardware RESET button (wired to nRF52 reset line,
@@ -52,7 +54,7 @@ inline const BoardConfig BOARD = {
     .pin_lora_busy = 17,
     .pin_lora_dio1 = 20,
     .pin_lora_sck  = 19,
-    .pin_lora_miso = 33,
+    .pin_lora_miso = 23,
     .pin_lora_mosi = 22,
 
     .rf_switch = {
