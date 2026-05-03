@@ -26,9 +26,11 @@ void begin();                                   // load from LittleFS at boot
 
 bool        getStandby();
 const char* getDisplayName();                   // returns "" if never set
+bool        getAutoCad();
 
 void setDisplayName(const char* name);          // saves to LittleFS
 void setStandby(bool on);                       // saves to LittleFS
+void setAutoCad(bool on);                       // saves to LittleFS
 
 }   // namespace NodeState
 

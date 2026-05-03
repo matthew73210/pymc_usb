@@ -14,9 +14,11 @@ namespace NodeState {
 
 static const char* PATH_NAME    = "/state_name";
 static const char* PATH_STANDBY = "/state_stby";
+static const char* PATH_AUTOCAD = "/state_acad";
 
 static char  s_name[24]  = "";
 static bool  s_standby   = false;
+static bool  s_auto_cad  = false;
 static bool  s_ready     = false;
 
 static void readFile(const char* path, char* buf, size_t cap) {
@@ -50,11 +52,16 @@ void begin() {
     readFile(PATH_STANDBY, tmp, sizeof(tmp));
     s_standby = (tmp[0] == '1');
 
+    char tmp2[4] = {};
+    readFile(PATH_AUTOCAD, tmp2, sizeof(tmp2));
+    s_auto_cad = (tmp2[0] == '1');
+
     s_ready = true;
 }
 
 const char* getDisplayName() { return s_name; }
 bool getStandby()            { return s_standby; }
+bool getAutoCad()            { return s_auto_cad; }
 
 void setDisplayName(const char* name) {
     if (!name) name = "";
@@ -68,6 +75,13 @@ void setStandby(bool on) {
     s_standby = on;
     char c = on ? '1' : '0';
     writeFile(PATH_STANDBY, &c, 1);
+}
+
+void setAutoCad(bool on) {
+    if (s_auto_cad == on) return;
+    s_auto_cad = on;
+    char c = on ? '1' : '0';
+    writeFile(PATH_AUTOCAD, &c, 1);
 }
 
 }   // namespace NodeState

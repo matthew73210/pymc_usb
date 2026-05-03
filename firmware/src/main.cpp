@@ -150,7 +150,8 @@ static StatusResp  status        = {};
 // will NOT call startReceive() after a TX/CAD/RX completion, and
 // the radio sits in idle. Cleared by CMD_RADIO_RESUME (which
 // re-applies the config and re-enters RX).
-static bool radioStandby = false;
+static bool radioStandby  = false;
+static bool autoCadEnabled = false;   // pre-TX CAD; enabled via CMD_SET_AUTO_CAD, persisted in NodeState
 
 // Single DIO1 ISR flag — interpreted as RX_DONE when !isTxActive, otherwise as TX_DONE.
 // A single flag avoids the race where an IRQ that fires at the tail of a TX
@@ -626,6 +627,47 @@ void processHostCommand(uint8_t cmd, const uint8_t* payload, uint16_t len,
         radio.standby();
         delay(1);
 
+        // ─── Auto-CAD before TX (when enabled by controller) ──
+        // Up to CAD_AUTO_RETRIES of CAD-with-backoff. If the
+        // channel is busy after every retry, we bail with
+        // ERR_CHANNEL_BUSY instead of trampling a neighbour.
+        // Local decision (lowest latency vs P4-managed equivalent).
+        if (autoCadEnabled) {
+            constexpr uint8_t  CAD_AUTO_RETRIES   = 3;
+            constexpr uint32_t CAD_TIMEOUT_MS     = 200;   // worst-case SF12 ≈ 100 ms
+            bool channel_clear = false;
+            for (uint8_t attempt = 0; attempt < CAD_AUTO_RETRIES; attempt++) {
+                ChannelScanConfig_t cfg = {};
+                cfg.cad.symNum    = cadSymNum;
+                cfg.cad.detPeak   = cadDetPeak;
+                cfg.cad.detMin    = cadDetMin;
+                cfg.cad.exitMode  = cadExitMode;
+                cfg.cad.irqFlags  = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS;
+                cfg.cad.irqMask   = RADIOLIB_IRQ_CAD_DEFAULT_MASK;
+                dio1Flag = false;
+                if (radio.startChannelScan(cfg) != RADIOLIB_ERR_NONE) break;
+                uint32_t cad_t0 = millis();
+                while (!dio1Flag && (millis() - cad_t0) < CAD_TIMEOUT_MS) {
+                    compatWdtReset();
+                    delay(2);
+                }
+                uint16_t irq = radio.getIrqFlags();
+                radio.clearIrqFlags(RADIOLIB_IRQ_CAD_DEFAULT_FLAGS);
+                bool busy = (irq & RADIOLIB_SX126X_IRQ_CAD_DETECTED) != 0;
+                if (!busy) { channel_clear = true; break; }
+                // Random backoff 50-200 ms to prevent step-locking
+                // with another sector that retried at the same time.
+                delay(50 + (millis() & 0x7F));
+            }
+            if (!channel_clear) {
+                LOG_R_WARN("auto-CAD: channel busy after retries, abort TX");
+                isTxActive = false;
+                sendError(ERR_CHANNEL_BUSY, src);
+                startReceive();
+                break;
+            }
+        }
+
         dio1Flag = false;
         int state = radio.startTransmit((uint8_t*)payload, len);
         LOG_R_INFO("TX_REQUEST len=%u src=%u state=%d",
@@ -887,6 +929,22 @@ void processHostCommand(uint8_t cmd, const uint8_t* payload, uint16_t len,
         break;
     }
 
+    case CMD_SET_AUTO_CAD: {
+        // Enables/disables on-modem auto-CAD: when on, every
+        // CMD_TX_REQUEST runs a CAD scan (with backoff retries)
+        // before startTransmit. Setting persisted in LittleFS so
+        // it survives modem reboot independent of the controller.
+        if (len < 1) { sendError(ERR_INVALID_CMD, src); break; }
+        bool on = payload[0] != 0;
+        autoCadEnabled = on;
+#if defined(BOARD_HELTEC_T114)
+        NodeState::setAutoCad(on);
+#endif
+        LOG_R_INFO("auto-CAD %s", on ? "ON" : "OFF");
+        uint8_t status = 0;
+        sendFrame(CMD_SET_AUTO_CAD_RESP, &status, 1, src);
+        break;
+    }
     case CMD_SET_DISPLAY_NAME: {
         // Controller pushes the per-sector display name (≤ 16 ASCII
         // bytes). Stored in the OledDisplay instance + LittleFS so
@@ -1030,7 +1088,8 @@ void setup() {
     // whether to enter standby on boot. Display name will be picked
     // up by the OLED at the first show*() call.
     NodeState::begin();
-    radioStandby = NodeState::getStandby();
+    radioStandby   = NodeState::getStandby();
+    autoCadEnabled = NodeState::getAutoCad();
 #endif
 
     Serial.begin(921600);
