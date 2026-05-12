@@ -37,11 +37,23 @@ for env in $ENVS; do
     echo "=== $env ==="
     "$PIO" run -e "$env"
     out_dir=".pio/build/$env"
+    rm -rf "$env"
+    mkdir -p "$env"
+
+    # nRF52 (Adafruit bootloader) envs produce .hex + .zip and have no
+    # separate bootloader/partitions blobs — flash via Adafruit DFU.
+    if [ -f "$out_dir/firmware.hex" ] && [ ! -f "$out_dir/firmware.bin" ]; then
+        cp "$out_dir/firmware.hex" "$env/firmware.hex"
+        cp "$out_dir/firmware.zip" "$env/firmware.zip"
+        echo "  → firmware/$env/{firmware.hex,firmware.zip}  (nRF52 DFU)"
+        continue
+    fi
+
+    # ESP32 envs: classic 3-blob layout (bootloader / partitions / firmware).
     if [ ! -f "$out_dir/firmware.bin" ]; then
         echo "ERROR: $out_dir/firmware.bin missing after build"
         exit 1
     fi
-    mkdir -p "$env"
     cp "$out_dir/bootloader.bin" "$env/bootloader.bin"
     cp "$out_dir/partitions.bin" "$env/partitions.bin"
     cp "$out_dir/firmware.bin"   "$env/firmware.bin"
@@ -49,8 +61,13 @@ for env in $ENVS; do
 done
 
 echo
-echo "Done. Flash any board with:"
+echo "Flash an ESP32 board with:"
 echo "    esptool.py --chip esp32s3 --port /dev/ttyUSB0 --baud 921600 \\"
 echo "        write_flash 0x0 firmware/<env>/bootloader.bin \\"
 echo "                    0x8000 firmware/<env>/partitions.bin \\"
 echo "                    0x10000 firmware/<env>/firmware.bin"
+echo
+echo "Flash the Heltec T114 (nRF52) via Adafruit DFU:"
+echo "    adafruit-nrfutil dfu serial \\"
+echo "        -pkg firmware/heltec_t114/firmware.zip \\"
+echo "        -p /dev/ttyACM0 -b 115200"
