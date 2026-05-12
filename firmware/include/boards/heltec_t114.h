@@ -45,7 +45,7 @@
 
 inline const BoardConfig BOARD = {
     .name        = "Heltec T114",
-    .fw_suffix   = "t114",
+    .fw_suffix   = "heltec_t114",
     .mdns_prefix = "t114",   // unused — nRF52 has no Wi-Fi/mDNS
 
     // SX1262 control pins.

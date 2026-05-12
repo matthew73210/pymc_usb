@@ -2,6 +2,13 @@
 // protocol.h — Wire protocol for LoRa Modem serial/TCP communication
 // v0.6 — adds CMD_GET_DEBUG / CMD_DEBUG_RESP and ERR_NO_RADIO;
 //        wire format unchanged.
+// v0.7 — sector-array integration set (mostly T114, but works on
+//        every board): CMD_RADIO_STANDBY / RESUME, CMD_SET_DISPLAY_NAME,
+//        CMD_SET_AUTO_CAD, CMD_ENTER_BOOTLOADER, CMD_LOG_MSG (async,
+//        modem→host), and in-app OTA over the transport (CMD_OTA_BEGIN
+//        / CHUNK / VERIFY / APPLY / ABORT). Wire format and existing
+//        CMD_* values unchanged — pre-v0.7 hosts work against v0.7
+//        firmware and vice versa, they just skip the new commands.
 // =============================================================
 #pragma once
 

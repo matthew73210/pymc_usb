@@ -98,7 +98,7 @@ void OledDisplay::begin() {
 // a 4-modem rack can tell which is which from across the room.
 //
 //   y=0   ┌────────────────────────────────────────┐
-//   |     │  EAST                  v0.7-t114       │  name banner, textSize=3
+//   |     │  EAST              v0.7-heltec_t114    │  name banner, textSize=3
 //   y=32  ├────────────────────────────────────────┤
 //   |     │  STATE: RX                             │  status line, textSize=2
 //   |     │  RX 12   TX 3                          │

@@ -39,7 +39,7 @@
 
 inline const BoardConfig BOARD = {
     .name        = "ESP32-P4-NANO",
-    .fw_suffix   = "esp32p4",
+    .fw_suffix   = "esp32_p4",
     .mdns_prefix = "p4nano",
 
     // Future-LoRa pins are listed below for documentation, but
