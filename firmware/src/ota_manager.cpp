@@ -7,6 +7,7 @@
 
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
+#include <Preferences.h>
 #include <Update.h>
 #include <WebServer.h>
 #include <WiFi.h>
@@ -16,15 +17,51 @@ namespace OTAManager {
 
 static constexpr uint32_t SANITY_TIMEOUT_MS = 120000;  // mark firmware valid after 2 min of health
 static constexpr uint16_t HTTP_PORT         = 80;
+static constexpr const char* NVS_NAMESPACE  = "lora_modem";
+static constexpr const char* HTTP_PASS_KEY  = "http_pass";
+static constexpr const char* HTTP_AUTH_USER = "admin";
+static constexpr const char* DEFAULT_HTTP_PASSWORD = "password";
+static constexpr uint8_t MAX_HTTP_PASSWORD_LEN = 64;
 
 static String      hostname;
 static String      token;
+static String      httpPassword;
 static WebServer*  httpServer       = nullptr;
 static bool        started          = false;
 static bool        markedValid      = false;
 static uint32_t    sanityDeadline   = 0;
 static bool        sawValidFrame    = false;
 
+static String modemTitle() {
+    return String(BOARD.name) + " LoRa Modem";
+}
+
+static String currentIPString() {
+    if (EthernetManager::hasIP()) return String(EthernetManager::getIPString());
+    return WiFi.localIP().toString();
+}
+
+static void loadHttpPassword() {
+    httpPassword = DEFAULT_HTTP_PASSWORD;
+    Preferences p;
+    if (p.begin(NVS_NAMESPACE, true)) {
+        httpPassword = p.getString(HTTP_PASS_KEY, DEFAULT_HTTP_PASSWORD);
+        p.end();
+    }
+    if (httpPassword.length() == 0) {
+        httpPassword = DEFAULT_HTTP_PASSWORD;
+    }
+}
+
+static bool saveHttpPassword(const String& password) {
+    Preferences p;
+    if (!p.begin(NVS_NAMESPACE, false)) return false;
+    size_t written = p.putString(HTTP_PASS_KEY, password);
+    p.end();
+    if (written == 0) return false;
+    httpPassword = password;
+    return true;
+}
 // ─── Rollback sanity check ──────────────────────────────────
 //
 // When ESP-IDF boots from a newly-written slot, otadata marks it as
@@ -55,7 +92,7 @@ static void attemptMarkValid() {
     markedValid = true;
 }
 
-// ─── HTTP POST /update handler ──────────────────────────────
+// ─── HTTP auth + handlers ───────────────────────────────────
 static bool checkAuth() {
     // LAN-only policy first: drop any client whose source IP is
     // outside RFC1918 / link-local / loopback. Same rule as the
@@ -70,9 +107,9 @@ static bool checkAuth() {
                          "Forbidden: pymc_usb modem accepts LAN clients only.\n");
         return false;
     }
-    if (token.length() == 0) return true;  // open — matches TCP "no-auth" mode
-    if (!httpServer->authenticate("heltec", token.c_str())) {
-        httpServer->requestAuthentication(BASIC_AUTH, "Heltec LoRa Modem");
+    if (httpPassword.length() == 0) httpPassword = DEFAULT_HTTP_PASSWORD;
+    if (!httpServer->authenticate(HTTP_AUTH_USER, httpPassword.c_str())) {
+        httpServer->requestAuthentication(BASIC_AUTH, modemTitle().c_str());
         return false;
     }
     return true;
@@ -80,16 +117,23 @@ static bool checkAuth() {
 
 static void handleRoot() {
     if (!checkAuth()) return;
+    String title = modemTitle();
     String body;
-    body.reserve(1024);
+    body.reserve(2048);
     body += F("<!DOCTYPE html><html><head><meta charset='utf-8'>"
-              "<title>Heltec LoRa Modem</title>"
+              "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+              "<title>");
+    body += title;
+    body += F("</title>"
               "<style>body{font-family:system-ui,sans-serif;max-width:540px;"
               "margin:1em auto;padding:0 1em;color:#222}"
-              "input[type=file]{margin:1em 0}"
-              "button{padding:.6em 1em;background:#3a7;color:#fff;border:0;border-radius:4px}"
-              ".m{color:#666;font-size:.9em}</style></head><body>");
-    body += F("<h2>Heltec LoRa Modem</h2>");
+              "input{width:100%;padding:.5em;box-sizing:border-box;font-size:1em}"
+              "input[type=file]{margin:1em 0;padding:.5em 0}"
+              "button{margin-top:.8em;padding:.6em 1em;background:#3a7;color:#fff;border:0;border-radius:4px}"
+              ".m{color:#666;font-size:.9em}"
+              "hr{margin:2em 0;border:0;border-top:1px solid #ddd}"
+              "label{display:block;margin-top:.9em;font-weight:600}</style></head><body>");
+    body += "<h2>" + title + "</h2>";
     body += "<p class='m'>mDNS: <b>" + hostname + ".local</b> &nbsp; IP: <b>" +
             WiFi.localIP().toString() + "</b></p>";
     body += F("<h3>OTA update</h3>"
@@ -98,9 +142,56 @@ static void handleRoot() {
               "<br><button type='submit'>Upload firmware.bin</button>"
               "</form>"
               "<p class='m'>CLI alternative: "
-              "<code>curl -F firmware=@firmware.bin http://");
-    body += hostname + ".local/update</code></p>";
+              "<code>curl -u admin:&lt;password&gt; -F firmware=@firmware.bin http://");
+    body += hostname + ".local/update</code></p>"
+            "<hr>"
+            "<h3>HTTP password</h3>"
+            "<form method='POST' action='/auth'>"
+            "<label>New password</label>"
+            "<input type='password' name='password' autocomplete='new-password' "
+            "required minlength='1' maxlength='64'>"
+            "<label>Confirm password</label>"
+            "<input type='password' name='confirm' autocomplete='new-password' "
+            "required minlength='1' maxlength='64'>"
+            "<button type='submit'>Save password</button>"
+            "</form>"
+            "<p class='m'>Username: <b>admin</b>. Password changes take effect on the next request.</p>";
     body += F("</body></html>");
+    httpServer->send(200, "text/html; charset=utf-8", body);
+}
+
+static void handleAuthSave() {
+    if (!checkAuth()) return;
+
+    String password = httpServer->arg("password");
+    String confirm  = httpServer->arg("confirm");
+    if (password.length() == 0 || password.length() > MAX_HTTP_PASSWORD_LEN) {
+        httpServer->send(400, "text/plain", "Password must be 1-64 characters.\n");
+        return;
+    }
+    if (password != confirm) {
+        httpServer->send(400, "text/plain", "Password confirmation does not match.\n");
+        return;
+    }
+    if (!saveHttpPassword(password)) {
+        httpServer->send(500, "text/plain", "Failed to save password.\n");
+        return;
+    }
+    if (token.length() == 0) {
+        ArduinoOTA.setPassword(httpPassword.c_str());
+    }
+    Serial.printf("[OTA] HTTP password changed by %s\n",
+                  httpServer->client().remoteIP().toString().c_str());
+
+    String body = F("<!DOCTYPE html><html><head><meta charset='utf-8'>"
+                    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+                    "<title>Password saved</title></head>"
+                    "<body style='font-family:system-ui,sans-serif;max-width:540px;"
+                    "margin:2em auto;padding:0 1em;color:#222'>"
+                    "<h2>Password saved</h2>"
+                    "<p>Use the new password the next time this page asks for credentials.</p>"
+                    "<p><a href='/'>Back to OTA page</a></p>"
+                    "</body></html>");
     httpServer->send(200, "text/html; charset=utf-8", body);
 }
 
@@ -154,6 +245,8 @@ static void configureArduinoOTA() {
     ArduinoOTA.setHostname(hostname.c_str());
     if (token.length() > 0) {
         ArduinoOTA.setPassword(token.c_str());
+    } else {
+        ArduinoOTA.setPassword(httpPassword.c_str());
     }
     ArduinoOTA.onStart([]() {
         Serial.println("[OTA/Arduino] start");
@@ -172,6 +265,7 @@ void begin(const String& hn, const String& tk) {
     if (started) return;
     hostname = hn;
     token    = tk;
+    loadHttpPassword();
 
     if (!MDNS.begin(hostname.c_str())) {
         Serial.println("[OTA] mDNS start failed");
@@ -185,6 +279,7 @@ void begin(const String& hn, const String& tk) {
 
     httpServer = new WebServer(HTTP_PORT);
     httpServer->on("/",       HTTP_GET,  handleRoot);
+    httpServer->on("/auth",   HTTP_POST, handleAuthSave);
     httpServer->on("/update", HTTP_POST, handleUpdateResult, handleUpdateUpload);
     httpServer->onNotFound([]() { httpServer->send(404, "text/plain", "Not found"); });
     httpServer->begin();
@@ -194,9 +289,16 @@ void begin(const String& hn, const String& tk) {
     markedValid    = false;
     started        = true;
 
+<<<<<<< HEAD
     Serial.printf("[OTA] HTTP /update + ArduinoOTA ready on %s (%s)\n",
                   WiFi.localIP().toString().c_str(),
                   token.length() > 0 ? "auth: token" : "auth: open");
+=======
+    Serial.printf("[OTA] HTTP /update + ArduinoOTA ready on %s (http auth: %s, arduino ota: %s)\n",
+                  currentIPString().c_str(),
+                  HTTP_AUTH_USER,
+                  token.length() > 0 ? "tcp token" : "http password");
+>>>>>>> 55b393d (firmware: require auth for OTA web page)
 }
 
 void loop() {
