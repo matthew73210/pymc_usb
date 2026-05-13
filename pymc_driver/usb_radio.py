@@ -1,11 +1,14 @@
 """
 USB LoRa Radio Driver for pymc_core
 
-Implements the LoRaRadio interface using a Heltec V3/V4 connected via USB-CDC
-running the heltec-lora-modem firmware. The Heltec acts as a "dumb" SX1262
-modem — all MeshCore protocol logic runs on the RPi in pymc_core.
+Implements the LoRaRadio interface using a pymc_usb modem connected via
+USB-CDC. The modem acts as a "dumb" SX1262 transceiver — all MeshCore
+protocol logic runs on the host in pymc_core.
 
 Drop-in replacement for SX1262Radio in pymc_core's hardware layer.
+
+Default sync word is 0x12 (MeshCore private syncword), matching the
+firmware default — change only if the deployment uses a custom value.
 
 Usage:
     from pymc_core.hardware.usb_radio import USBLoRaRadio
@@ -35,80 +38,27 @@ from typing import Callable, Optional
 
 import serial
 
+from .protocol_constants import (
+    PROTO_SYNC,
+    MAX_LORA_PAYLOAD,
+    CMD_TX_REQUEST, CMD_SET_CONFIG, CMD_GET_CONFIG,
+    CMD_STATUS_REQ, CMD_NOISE_REQ,
+    CMD_CAD_REQUEST, CMD_RX_START, CMD_SET_CAD_PARAMS,
+    CMD_SET_WIFI, CMD_AUTH, CMD_WIFI_RESET,
+    CMD_GET_WIFI, CMD_GET_VERSION, CMD_PING,
+    CMD_TX_DONE, CMD_TX_FAIL, CMD_RX_PACKET,
+    CMD_CONFIG_RESP, CMD_STATUS_RESP, CMD_NOISE_RESP,
+    CMD_CAD_RESP, CMD_RX_STARTED, CMD_CAD_PARAMS_RESP,
+    CMD_AUTH_OK, CMD_WIFI_STATUS, CMD_VERSION_RESP,
+    CMD_ERROR, CMD_PONG,
+    WIFI_MODE_OFFLINE, WIFI_MODE_STA_CONNECTING,
+    WIFI_MODE_STA_CONNECTED, WIFI_MODE_AP_CONFIG,
+    RADIO_CONFIG_FMT, RADIO_CONFIG_SIZE,
+    STATUS_RESP_FMT, STATUS_RESP_SIZE,
+    crc16_ccitt, build_frame,
+)
+
 logger = logging.getLogger("USBLoRaRadio")
-
-# ─── Protocol constants (must match firmware protocol.h) ─────
-PROTO_SYNC = 0xAA
-
-# Host → Modem
-CMD_TX_REQUEST  = 0x01
-CMD_SET_CONFIG  = 0x10
-CMD_GET_CONFIG  = 0x11
-CMD_STATUS_REQ  = 0x20
-CMD_NOISE_REQ   = 0x22
-CMD_CAD_REQUEST = 0x30
-CMD_RX_START    = 0x31
-CMD_SET_CAD_PARAMS = 0x34   # v0.5.4
-CMD_SET_WIFI    = 0x41   # v0.5
-CMD_AUTH        = 0x50
-CMD_WIFI_RESET  = 0x60
-CMD_GET_WIFI    = 0x61   # v0.5
-CMD_GET_VERSION = 0x70   # v0.5.3
-CMD_PING        = 0xFF
-
-# Modem → Host
-CMD_TX_DONE     = 0x02
-CMD_TX_FAIL     = 0x03
-CMD_RX_PACKET   = 0x04
-CMD_CONFIG_RESP = 0x12
-CMD_STATUS_RESP = 0x21
-CMD_NOISE_RESP  = 0x23
-CMD_CAD_RESP    = 0x32
-CMD_CAD_PARAMS_RESP = 0x35  # v0.5.4
-CMD_RX_STARTED  = 0x33
-CMD_AUTH_OK     = 0x51
-CMD_WIFI_STATUS = 0x62   # v0.5
-CMD_VERSION_RESP = 0x71  # v0.5.3
-CMD_ERROR       = 0xFE
-CMD_PONG        = 0xFF
-
-MAX_LORA_PAYLOAD = 255
-
-# WIFI_STATUS mode codes (matches firmware main.cpp::buildWifiStatusPayload)
-WIFI_MODE_OFFLINE        = 0
-WIFI_MODE_STA_CONNECTING = 1
-WIFI_MODE_STA_CONNECTED  = 2
-WIFI_MODE_AP_CONFIG      = 3
-
-# RadioConfig struct: <IIBBbHB = 14 bytes
-RADIO_CONFIG_FMT = "<IIBBbHB"
-RADIO_CONFIG_SIZE = struct.calcsize(RADIO_CONFIG_FMT)
-
-# StatusResp struct: <IIIIhhhbB = 24 bytes
-STATUS_RESP_FMT = "<IIIIhhhbB"
-STATUS_RESP_SIZE = struct.calcsize(STATUS_RESP_FMT)
-
-
-def _crc16_ccitt(data: bytes) -> int:
-    """CRC-16/CCITT matching firmware implementation."""
-    crc = 0xFFFF
-    for byte in data:
-        crc ^= byte << 8
-        for _ in range(8):
-            if crc & 0x8000:
-                crc = (crc << 1) ^ 0x1021
-            else:
-                crc <<= 1
-            crc &= 0xFFFF
-    return crc
-
-
-def _build_frame(cmd: int, payload: bytes = b"") -> bytes:
-    """Build a wire protocol frame."""
-    length = len(payload)
-    hdr = struct.pack("<BH", cmd, length)
-    crc = _crc16_ccitt(hdr + payload)
-    return bytes([PROTO_SYNC]) + hdr + payload + struct.pack("<H", crc)
 
 
 # Import LoRaRadio base conditionally — allows standalone testing
@@ -130,9 +80,9 @@ else:
 class USBLoRaRadio(_RadioBase):
     """USB LoRa Radio — pymc_core LoRaRadio interface over USB-CDC serial.
 
-    Communicates with Heltec V3/V4 running heltec-lora-modem firmware.
-    Provides the same interface as SX1262Radio for transparent integration
-    with pymc_core's Dispatcher and MeshNode.
+    Communicates with any board running the pymc_usb firmware over a
+    USB-CDC serial link. Provides the same interface as SX1262Radio for
+    transparent integration with pymc_core's Dispatcher and MeshNode.
     """
 
     def __init__(
@@ -430,14 +380,14 @@ class USBLoRaRadio(_RadioBase):
             "last_snr": self.last_snr,
             "last_signal_rssi": self.last_signal_rssi,
             "hardware_ready": self._initialized,
-            "driver": "usb_heltec",
+            "driver": "pymc_usb",
             "port": self.port,
             "tx_count": self._tx_count,
             "rx_count": self._rx_count,
         }
 
     async def get_modem_status(self) -> Optional[dict]:
-        """Query detailed status from Heltec modem firmware."""
+        """Query detailed status from the modem firmware."""
         resp = await self._send_command(
             CMD_STATUS_REQ, b"",
             expect_cmd=CMD_STATUS_RESP,
@@ -464,7 +414,7 @@ class USBLoRaRadio(_RadioBase):
         """Get current noise floor in dBm.
 
         Matches SX1262Radio.get_noise_floor() interface.
-        The noise floor is continuously sampled by the Heltec firmware
+        The noise floor is continuously sampled by the modem firmware
         using the same algorithm as SX1262Radio._sample_noise_floor():
         - 20 instantaneous RSSI samples during quiet periods
         - 500ms quiet time after last packet before sampling
@@ -595,8 +545,8 @@ class USBLoRaRadio(_RadioBase):
               "ip": str,            # "192.168.1.42" or "0.0.0.0"
               "port": int,          # TCP port
               "ssid": str,
-              "hostname": str,      # "heltec-ab12cd" — append ".local" for mDNS
-              "mdns": str,          # "heltec-ab12cd.local"
+              "hostname": str,      # "pymc-ab12cd" — append ".local" for mDNS
+              "mdns": str,          # "pymc-ab12cd.local"
             }
         or None on timeout.
         """
@@ -690,7 +640,7 @@ class USBLoRaRadio(_RadioBase):
         SET_CONFIG into the same CDC bulk stream causes SET_CONFIG to be
         silently dropped. Keep this for explicit health checks.
         """
-        frame = _build_frame(CMD_PING)
+        frame = build_frame(CMD_PING)
         self._serial.write(frame)
 
         resp = self._read_frame_sync(timeout=timeout, expect_cmd=CMD_PONG)
@@ -712,7 +662,7 @@ class USBLoRaRadio(_RadioBase):
             self.sync_word,
             self.preamble_length,
         )
-        frame = _build_frame(CMD_SET_CONFIG, payload)
+        frame = build_frame(CMD_SET_CONFIG, payload)
         self._serial.write(frame)
 
         # 10 s covers the worst case where a burst of RX_PACKET frames from
@@ -780,7 +730,7 @@ class USBLoRaRadio(_RadioBase):
                     continue
 
                 received_crc = struct.unpack("<H", crc_bytes)[0]
-                computed_crc = _crc16_ccitt(hdr + payload)
+                computed_crc = crc16_ccitt(hdr + payload)
                 if received_crc != computed_crc:
                     logger.debug(
                         f"CRC mismatch (likely fake SYNC in payload): "
@@ -842,7 +792,7 @@ class USBLoRaRadio(_RadioBase):
                     hdr = bytes(buf[1:4])
                     payload = bytes(buf[4 : 4 + length])
                     crc_recv = buf[4 + length] | (buf[5 + length] << 8)
-                    crc_comp = _crc16_ccitt(hdr + payload)
+                    crc_comp = crc16_ccitt(hdr + payload)
 
                     # Consume frame
                     buf = buf[frame_size:]
@@ -960,7 +910,7 @@ class USBLoRaRadio(_RadioBase):
             self._response_data.pop(expect_cmd, None)
 
         try:
-            frame = _build_frame(cmd, payload)
+            frame = build_frame(cmd, payload)
             self._serial.write(frame)
             self._serial.flush()
 

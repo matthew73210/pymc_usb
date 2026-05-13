@@ -1,11 +1,14 @@
 """
 TCP LoRa Radio Driver for pymc_core
 
-Implements the LoRaRadio interface using common LoRa boards running
-custom-firmware in Wi-Fi/TCP mode. Same binary protocol as
-USBLoRaRadio — only the transport differs.
+Implements the LoRaRadio interface using any board running the pymc_usb
+firmware in Wi-Fi/TCP mode. Same binary protocol as USBLoRaRadio — only
+the transport differs.
 
 Drop-in replacement for SX1262Radio in pymc_core's hardware layer.
+
+Default sync word is 0x12 (MeshCore private syncword), matching the
+firmware default — change only if the deployment uses a custom value.
 
 Usage:
     from pymc_core.hardware.tcp_radio import TCPLoRaRadio
@@ -36,70 +39,23 @@ import threading
 import time
 from typing import Callable, Optional
 
+from .protocol_constants import (
+    PROTO_SYNC,
+    CMD_TX_REQUEST, CMD_SET_CONFIG, CMD_GET_CONFIG,
+    CMD_STATUS_REQ, CMD_NOISE_REQ,
+    CMD_CAD_REQUEST, CMD_RX_START, CMD_SET_CAD_PARAMS,
+    CMD_AUTH, CMD_WIFI_RESET, CMD_PING,
+    CMD_TX_DONE, CMD_TX_FAIL, CMD_RX_PACKET,
+    CMD_CONFIG_RESP, CMD_STATUS_RESP, CMD_NOISE_RESP,
+    CMD_CAD_RESP, CMD_RX_STARTED, CMD_CAD_PARAMS_RESP,
+    CMD_AUTH_OK, CMD_ERROR, CMD_PONG,
+    ERR_UNAUTHORIZED,
+    RADIO_CONFIG_FMT, RADIO_CONFIG_SIZE,
+    STATUS_RESP_FMT, STATUS_RESP_SIZE,
+    crc16_ccitt, build_frame,
+)
+
 logger = logging.getLogger("TCPLoRaRadio")
-
-# ─── Protocol constants (must match firmware protocol.h) ─────
-PROTO_SYNC = 0xAA
-
-# Host → Modem
-CMD_TX_REQUEST  = 0x01
-CMD_SET_CONFIG  = 0x10
-CMD_GET_CONFIG  = 0x11
-CMD_STATUS_REQ  = 0x20
-CMD_NOISE_REQ   = 0x22
-CMD_CAD_REQUEST = 0x30
-CMD_RX_START    = 0x31
-CMD_SET_CAD_PARAMS = 0x34  # v0.5.4
-CMD_AUTH        = 0x50
-CMD_WIFI_RESET  = 0x60
-CMD_PING        = 0xFF
-
-# Modem → Host
-CMD_TX_DONE     = 0x02
-CMD_TX_FAIL     = 0x03
-CMD_RX_PACKET   = 0x04
-CMD_CONFIG_RESP = 0x12
-CMD_STATUS_RESP = 0x21
-CMD_NOISE_RESP  = 0x23
-CMD_CAD_RESP    = 0x32
-CMD_RX_STARTED  = 0x33
-CMD_CAD_PARAMS_RESP = 0x35  # v0.5.4
-CMD_AUTH_OK     = 0x51
-CMD_ERROR       = 0xFE
-CMD_PONG        = 0xFF
-
-# Error codes
-ERR_UNAUTHORIZED = 0x09
-
-# RadioConfig struct: <IIBBbHB = 14 bytes
-RADIO_CONFIG_FMT = "<IIBBbHB"
-RADIO_CONFIG_SIZE = struct.calcsize(RADIO_CONFIG_FMT)
-
-# StatusResp struct: <IIIIhhhbB = 24 bytes
-STATUS_RESP_FMT = "<IIIIhhhbB"
-STATUS_RESP_SIZE = struct.calcsize(STATUS_RESP_FMT)
-
-
-def _crc16_ccitt(data: bytes) -> int:
-    """CRC-16/CCITT matching firmware implementation."""
-    crc = 0xFFFF
-    for byte in data:
-        crc ^= byte << 8
-        for _ in range(8):
-            if crc & 0x8000:
-                crc = (crc << 1) ^ 0x1021
-            else:
-                crc <<= 1
-            crc &= 0xFFFF
-    return crc
-
-
-def _build_frame(cmd: int, payload: bytes = b"") -> bytes:
-    """Build a wire protocol frame."""
-    length = len(payload)
-    hdr = struct.pack("<BH", cmd, length)
-    crc = _crc16_ccitt(hdr + payload)
-    return bytes([PROTO_SYNC]) + hdr + payload + struct.pack("<H", crc)
 
 
 # Import LoRaRadio base conditionally — allows standalone testing
@@ -120,9 +76,9 @@ else:
 class TCPLoRaRadio(_RadioBase):
     """TCP LoRa Radio — pymc_core LoRaRadio interface over Wi-Fi/TCP.
 
-    Communicates with Heltec V3/V4 running heltec-lora-modem firmware in
-    Wi-Fi STA mode. Provides the same interface as SX1262Radio and
-    USBLoRaRadio for transparent integration with pymc_core.
+    Communicates with any board running the pymc_usb firmware in Wi-Fi
+    STA mode. Provides the same interface as SX1262Radio and USBLoRaRadio
+    for transparent integration with pymc_core.
     """
 
     def __init__(
@@ -206,8 +162,8 @@ class TCPLoRaRadio(_RadioBase):
         If the initial connect/handshake fails, the radio is still marked
         initialised and the RX worker is started in deferred-connect mode —
         it will keep retrying the connection with exponential backoff until
-        the Heltec appears. This lets the repeater's HTTP server / setup
-        wizard come up even when the Heltec is offline or its host has not
+        the modem appears. This lets the repeater's HTTP server / setup
+        wizard come up even when the modem is offline or its host has not
         been set yet (e.g. placeholder hostname after a fresh install).
         """
         if self._initialized:
@@ -237,7 +193,7 @@ class TCPLoRaRadio(_RadioBase):
                 connected = False
         except Exception as e:
             logger.warning(
-                f"Could not reach Heltec at {self.host}:{self.port} ({e}); "
+                f"Could not reach modem at {self.host}:{self.port} ({e}); "
                 f"starting in deferred-connect mode — RX worker will keep retrying"
             )
             self._close_sock()
@@ -245,7 +201,7 @@ class TCPLoRaRadio(_RadioBase):
 
         # Always start the RX worker. When connected it processes traffic
         # immediately; otherwise _reconnect_with_backoff drives reconnection
-        # so the repeater UI can stay up while the user sets tcp_heltec.host
+        # so the repeater UI can stay up while the user sets pymc_tcp.host
         # via /api/setup_wizard or /api/update_radio_config.
         self._stop_event.clear()
         self._rx_thread = threading.Thread(
@@ -259,7 +215,7 @@ class TCPLoRaRadio(_RadioBase):
         else:
             logger.info(
                 "TCPLoRaRadio initialised in deferred-connect mode "
-                "(no Heltec yet — radio commands will return None until reachable)"
+                "(no modem yet — radio commands will return None until reachable)"
             )
         return True
 
@@ -411,7 +367,7 @@ class TCPLoRaRadio(_RadioBase):
             "last_snr": self.last_snr,
             "last_signal_rssi": self.last_signal_rssi,
             "hardware_ready": self._initialized,
-            "driver": "tcp_heltec",
+            "driver": "pymc_tcp",
             "host": self.host,
             "port": self.port,
             "tx_count": self._tx_count,
@@ -533,7 +489,7 @@ class TCPLoRaRadio(_RadioBase):
 
     def _auth_sync(self, timeout: float = 3.0) -> bool:
         """Send CMD_AUTH with token payload, expect CMD_AUTH_OK."""
-        frame = _build_frame(CMD_AUTH, self.token.encode("utf-8"))
+        frame = build_frame(CMD_AUTH, self.token.encode("utf-8"))
         self._sock_write(frame)
 
         deadline = time.time() + timeout
@@ -555,7 +511,7 @@ class TCPLoRaRadio(_RadioBase):
         return False
 
     def _ping_sync(self, timeout: float = 3.0) -> bool:
-        frame = _build_frame(CMD_PING)
+        frame = build_frame(CMD_PING)
         self._sock_write(frame)
 
         deadline = time.time() + timeout
@@ -577,7 +533,7 @@ class TCPLoRaRadio(_RadioBase):
             self.sync_word,
             self.preamble_length,
         )
-        frame = _build_frame(CMD_SET_CONFIG, payload)
+        frame = build_frame(CMD_SET_CONFIG, payload)
         self._sock_write(frame)
 
         # The firmware may emit RX_PACKET broadcasts concurrently; filter by cmd.
@@ -649,7 +605,7 @@ class TCPLoRaRadio(_RadioBase):
                 crc_bytes += chunk
 
             received_crc = struct.unpack("<H", crc_bytes)[0]
-            computed_crc = _crc16_ccitt(hdr + payload)
+            computed_crc = crc16_ccitt(hdr + payload)
             if received_crc != computed_crc:
                 logger.warning(
                     f"CRC mismatch: recv=0x{received_crc:04X} "
@@ -725,7 +681,7 @@ class TCPLoRaRadio(_RadioBase):
             try:
                 if self._sock is None:
                     # Deferred-connect mode: begin() couldn't reach the
-                    # Heltec, so we drive the reconnect ourselves with the
+                    # modem, so we drive the reconnect ourselves with the
                     # same exponential backoff used after a runtime drop.
                     # Returns False if stop_event fires while waiting.
                     if not self._reconnect_with_backoff():
@@ -782,7 +738,7 @@ class TCPLoRaRadio(_RadioBase):
                     hdr = bytes(buf[1:4])
                     payload = bytes(buf[4 : 4 + length])
                     crc_recv = buf[4 + length] | (buf[5 + length] << 8)
-                    crc_comp = _crc16_ccitt(hdr + payload)
+                    crc_comp = crc16_ccitt(hdr + payload)
 
                     buf = buf[frame_size:]
 
@@ -896,7 +852,7 @@ class TCPLoRaRadio(_RadioBase):
             self._response_data.pop(expect_cmd, None)
 
         try:
-            frame = _build_frame(cmd, payload)
+            frame = build_frame(cmd, payload)
             try:
                 self._sock_write(frame)
             except (OSError, ConnectionError) as e:
@@ -1020,7 +976,7 @@ class TCPLoRaRadio(_RadioBase):
     def set_tcp_target(self, host: Optional[str] = None,
                        port: Optional[int] = None,
                        token: Optional[str] = None) -> bool:
-        """Change the Heltec TCP endpoint at runtime.
+        """Change the modem TCP endpoint at runtime.
 
         Updates self.host/port/token in place, closes the current socket,
         and lets _rx_worker re-establish the connection via the existing
@@ -1028,7 +984,7 @@ class TCPLoRaRadio(_RadioBase):
 
         Use case: a fresh repeater install starts in deferred-connect mode
         with a placeholder host; the user supplies the real one later
-        through the dedicated panel at /heltec, and we apply it without a
+        through a dedicated config panel, and we apply it without a
         service restart.
         """
         changed = []

@@ -22,6 +22,24 @@ except ImportError:
     _SX1262_AVAILABLE = False
     SX1262Radio = None
 
+# Conditional import for KissSerialWrapper (requires pyserial)
+try:
+    from .kiss_serial_wrapper import KissSerialWrapper
+
+    _KISS_SERIAL_AVAILABLE = True
+except ImportError:
+    _KISS_SERIAL_AVAILABLE = False
+    KissSerialWrapper = None
+
+# Conditional import for KissModemWrapper (requires pyserial)
+try:
+    from .kiss_modem_wrapper import KissModemWrapper
+
+    _KISS_MODEM_AVAILABLE = True
+except ImportError:
+    _KISS_MODEM_AVAILABLE = False
+    KissModemWrapper = None
+
 # Conditional import for USBLoRaRadio (requires pyserial)
 try:
     from .usb_radio import USBLoRaRadio
@@ -49,6 +67,14 @@ if _WS_AVAILABLE:
 # Add SX1262Radio to exports if available
 if _SX1262_AVAILABLE:
     __all__.append("SX1262Radio")
+
+# Add KissSerialWrapper to exports if available
+if _KISS_SERIAL_AVAILABLE:
+    __all__.append("KissSerialWrapper")
+
+# Add KissModemWrapper to exports if available
+if _KISS_MODEM_AVAILABLE:
+    __all__.append("KissModemWrapper")
 
 # Add USBLoRaRadio to exports if available
 if _USB_AVAILABLE:
