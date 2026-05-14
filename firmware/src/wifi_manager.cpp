@@ -4,6 +4,7 @@
 #include "wifi_manager.h"
 #include "config_portal.h"
 #include "board_config.h"
+#include "compat.h"
 
 #include <WiFi.h>
 #include <Preferences.h>
@@ -14,11 +15,13 @@ static constexpr const char* NVS_NAMESPACE         = "lora_modem";
 static constexpr uint16_t    DEFAULT_TCP_PORT      = 5055;
 static constexpr uint32_t    STA_CONNECT_TIMEOUT_MS = 30000;
 static constexpr uint32_t    PRG_RESET_HOLD_MS     = 3000;
+static constexpr uint8_t     MAX_HOSTNAME_LEN      = 32;
 
 static Config  cfg;
 static Mode    currentMode = Mode::OFFLINE;
 static String  apSSID;
 static String  ipStr       = "---";
+static String  effectiveHostname;
 static bool    eventsRegistered = false;
 
 // Log lines use plain ASCII so any connected host protocol parser
@@ -61,11 +64,14 @@ static void loadConfig() {
     Preferences p;
     if (!p.begin(NVS_NAMESPACE, true)) {
         cfg = {};
+        cfg.hostname = "";
         cfg.tcpPort = DEFAULT_TCP_PORT;
+        effectiveHostname = "";
         return;
     }
     cfg.ssid        = p.getString("ssid",  "");
     cfg.password    = p.getString("pass",  "");
+    cfg.hostname    = p.getString("host",  "");
     cfg.useStaticIP = p.getBool  ("static", false);
     cfg.staticIP    = IPAddress(p.getUInt("ip",  0));
     cfg.gateway     = IPAddress(p.getUInt("gw",  0));
@@ -76,11 +82,57 @@ static void loadConfig() {
     p.end();
 }
 
+static String buildDefaultHostname() {
+    uint8_t mac[6] = {0};
+    compatGetMac(mac);
+    char buf[40];
+    snprintf(buf, sizeof(buf), "%s-%02x%02x%02x",
+             BOARD.mdns_prefix, mac[3], mac[4], mac[5]);
+    return String(buf);
+}
+
+static String sanitizeHostname(const String& raw) {
+    String out;
+    out.reserve(raw.length());
+
+    bool lastWasHyphen = false;
+    for (size_t i = 0; i < raw.length() && out.length() < MAX_HOSTNAME_LEN; i++) {
+        char c = raw[i];
+        if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+
+        bool valid = (c >= 'a' && c <= 'z') ||
+                     (c >= '0' && c <= '9') ||
+                     c == '-';
+        if (!valid) c = '-';
+
+        if (c == '-') {
+            if (out.length() == 0 || lastWasHyphen) continue;
+            lastWasHyphen = true;
+        } else {
+            lastWasHyphen = false;
+        }
+        out += c;
+    }
+
+    while (out.endsWith("-")) {
+        out.remove(out.length() - 1);
+    }
+    return out;
+}
+
+static void refreshEffectiveHostname() {
+    effectiveHostname = sanitizeHostname(cfg.hostname);
+    if (effectiveHostname.length() == 0) {
+        effectiveHostname = buildDefaultHostname();
+    }
+}
+
 void saveConfig(const Config& newCfg) {
     Preferences p;
     if (!p.begin(NVS_NAMESPACE, false)) return;
     p.putString("ssid",  newCfg.ssid);
     p.putString("pass",  newCfg.password);
+    p.putString("host",  sanitizeHostname(newCfg.hostname));
     p.putBool  ("static", newCfg.useStaticIP);
     p.putUInt  ("ip",    (uint32_t)newCfg.staticIP);
     p.putUInt  ("gw",    (uint32_t)newCfg.gateway);
@@ -90,6 +142,8 @@ void saveConfig(const Config& newCfg) {
     p.putUShort("port",  newCfg.tcpPort);
     p.end();
     cfg = newCfg;
+    cfg.hostname = sanitizeHostname(cfg.hostname);
+    refreshEffectiveHostname();
 }
 
 void factoryReset() {
@@ -139,8 +193,9 @@ static void startAPMode() {
 static bool attemptSTA() {
     if (cfg.ssid.length() == 0) return false;
 
-    Serial.printf("[WiFi] STA connecting to '%s' (%s, port=%u, auth=%s)\n",
+    Serial.printf("[WiFi] STA connecting to '%s' host='%s' (%s, port=%u, auth=%s)\n",
                   cfg.ssid.c_str(),
+                  effectiveHostname.c_str(),
                   cfg.useStaticIP ? "static IP" : "DHCP",
                   (unsigned)cfg.tcpPort,
                   cfg.tcpToken.length() > 0 ? "token" : "open");
@@ -148,6 +203,7 @@ static bool attemptSTA() {
     WiFi.persistent(false);   // we manage persistence via Preferences
     WiFi.setAutoReconnect(true);
     WiFi.mode(WIFI_STA);
+    WiFi.setHostname(effectiveHostname.c_str());
     if (cfg.useStaticIP) {
         WiFi.config(cfg.staticIP, cfg.gateway, cfg.subnet, cfg.dns);
     }
@@ -184,13 +240,18 @@ void loadConfigOnly() {
     // Used on Wi-Fi-disabled boards so the saved tcpPort/tcpToken
     // are still available to the TCP server.
     loadConfig();
+    cfg.hostname = sanitizeHostname(cfg.hostname);
+    refreshEffectiveHostname();
 }
 
 void begin() {
     loadConfig();
+    cfg.hostname = sanitizeHostname(cfg.hostname);
+    refreshEffectiveHostname();
 
-    Serial.printf("[Boot] WifiManager: saved ssid='%s' %s\n",
+    Serial.printf("[Boot] WifiManager: saved ssid='%s' host='%s' %s\n",
                   cfg.ssid.c_str(),
+                  effectiveHostname.c_str(),
                   cfg.ssid.length() == 0 ? "(empty -> AP mode)" : "");
 
     if (!eventsRegistered) {
@@ -243,6 +304,7 @@ bool        isSTAConnected()  { return currentMode == Mode::STA_CONNECTED; }
 bool        isAPActive()      { return currentMode == Mode::AP_CONFIG; }
 const char* getIPString()     { return ipStr.c_str(); }
 const Config& getConfig()     { return cfg; }
+const char* getHostname()     { return effectiveHostname.c_str(); }
 
 const char* getSSID() {
     if (currentMode == Mode::AP_CONFIG) return apSSID.c_str();

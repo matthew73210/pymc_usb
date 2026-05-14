@@ -120,6 +120,9 @@ static void handleRoot() {
     html += "<input type='text' name='dns' value='" + cfg.dns.toString() + "' placeholder='1.1.1.1'>";
 
     html += F("<hr>");
+    html += F("<label>Hostname <span class='hint'>(optional; blank = default mDNS name)</span></label>");
+    html += "<input type='text' name='hostname' autocomplete='off' maxlength='32' value='" +
+            htmlEscape(cfg.hostname) + "' placeholder='ethermesh-1w'>";
     html += F("<label>TCP port</label>");
     html += "<input type='number' name='port' min='1' max='65535' value='" + String(cfg.tcpPort) + "'>";
     html += F("<label>TCP auth token <span class='hint'>(optional; empty = no auth)</span></label>");
@@ -153,14 +156,17 @@ static void handleSave() {
     newCfg.subnet      = parseIP(server->arg("sn"));
     newCfg.dns         = parseIP(server->arg("dns"));
     newCfg.tcpToken    = server->arg("token");
+    newCfg.hostname    = server->arg("hostname");
+    newCfg.hostname.trim();
 
     int port = server->arg("port").toInt();
     if (port < 1 || port > 65535) port = 5055;
     newCfg.tcpPort = (uint16_t)port;
 
     Serial.printf("[Portal] POST /save: ssid_sel='%s' ssid_manual='%s' -> ssid='%s' "
-                  "password_len=%u static=%d port=%u token_len=%u\n",
+                  "host='%s' password_len=%u static=%d port=%u token_len=%u\n",
                   ssidSel.c_str(), ssidMan.c_str(), newCfg.ssid.c_str(),
+                  newCfg.hostname.c_str(),
                   (unsigned)newCfg.password.length(),
                   (int)newCfg.useStaticIP,
                   (unsigned)newCfg.tcpPort,
