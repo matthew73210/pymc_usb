@@ -56,7 +56,7 @@ static void resetPhy(int8_t rst_pin) {
     delay(50);   // datasheet: IP101 needs ≥10 ms after RST deassert
 }
 
-void begin() {
+void begin(const char* hostname) {
     if (!BOARD.ethernet.enabled) return;
 
     const auto& e = BOARD.ethernet;
@@ -67,6 +67,14 @@ void begin() {
                   e.rmii_clock_input ? "EXT_IN" : "INT_OUT");
 
     resetPhy(e.pin_phy_reset);
+
+    if (hostname && hostname[0] != '\0') {
+        if (ETH.setHostname(hostname)) {
+            Serial.printf("[ETH] hostname='%s'\n", hostname);
+        } else {
+            Serial.printf("[ETH] failed to set hostname '%s'\n", hostname);
+        }
+    }
 
     eth_phy_type_t phy = mapPhyType(e.phy_type);
     if (phy == ETH_PHY_MAX) {
@@ -174,7 +182,7 @@ const char* getMACString() {
 #else  // !CONFIG_ETH_USE_ESP32_EMAC — chip has no internal EMAC
 
 namespace EthernetManager {
-void        begin()        {}
+void        begin(const char*) {}
 void        end()          {}
 void        loop()         {}
 bool        isLinkUp()     { return false; }

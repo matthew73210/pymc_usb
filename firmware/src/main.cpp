@@ -1241,9 +1241,10 @@ void setup() {
     // and skip Wi-Fi; if no link we tear EMAC back down (so the RMII
     // GPIOs are released) and fall back to Wi-Fi. Boards without
     // Ethernet (`ethernet.enabled = false`) skip straight to Wi-Fi.
+    WifiManager::loadConfigOnly();
     bool useEthernet = false;
     if (BOARD.ethernet.enabled) {
-        EthernetManager::begin();   // waits up to 5 s for link + DHCP
+        EthernetManager::begin(WifiManager::getHostname());   // waits up to 5 s for link + DHCP
         if (EthernetManager::isLinkUp()) {
             useEthernet = true;
             Serial.println("[NET] Ethernet link up — Wi-Fi will be skipped");
@@ -1256,10 +1257,8 @@ void setup() {
     if (!useEthernet && BOARD.has_wifi) {
         WifiManager::begin();
     } else {
-        // Either Ethernet won, or Wi-Fi is compile-time disabled. We
-        // still need the saved tcpPort/tcpToken loaded from NVS for
-        // the TCP server config below.
-        WifiManager::loadConfigOnly();
+        // Either Ethernet won, or Wi-Fi is compile-time disabled. The
+        // saved config was loaded above for hostname/TCP setup.
     }
     deviceHostname = WifiManager::getHostname();
 
