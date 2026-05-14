@@ -1242,9 +1242,16 @@ void setup() {
     // GPIOs are released) and fall back to Wi-Fi. Boards without
     // Ethernet (`ethernet.enabled = false`) skip straight to Wi-Fi.
     WifiManager::loadConfigOnly();
+    const auto& netCfg = WifiManager::getConfig();
     bool useEthernet = false;
     if (BOARD.ethernet.enabled) {
-        EthernetManager::begin(WifiManager::getHostname());   // waits up to 5 s for link + DHCP
+        EthernetManager::begin(WifiManager::getHostname(),
+                               netCfg.useStaticIP,
+                               netCfg.staticIP,
+                               netCfg.gateway,
+                               netCfg.subnet,
+                               netCfg.dns1,
+                               netCfg.dns2);   // waits up to 5 s for link + DHCP
         if (EthernetManager::isLinkUp()) {
             useEthernet = true;
             Serial.println("[NET] Ethernet link up — Wi-Fi will be skipped");

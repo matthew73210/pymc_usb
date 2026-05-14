@@ -76,7 +76,8 @@ static void loadConfig() {
     cfg.staticIP    = IPAddress(p.getUInt("ip",  0));
     cfg.gateway     = IPAddress(p.getUInt("gw",  0));
     cfg.subnet      = IPAddress(p.getUInt("sn",  0));
-    cfg.dns         = IPAddress(p.getUInt("dns", 0));
+    cfg.dns1        = IPAddress(p.getUInt("dns", 0));
+    cfg.dns2        = IPAddress(p.getUInt("dns2", 0));
     cfg.tcpToken    = p.getString("token", "");
     cfg.tcpPort     = p.getUShort("port", DEFAULT_TCP_PORT);
     p.end();
@@ -137,7 +138,8 @@ void saveConfig(const Config& newCfg) {
     p.putUInt  ("ip",    (uint32_t)newCfg.staticIP);
     p.putUInt  ("gw",    (uint32_t)newCfg.gateway);
     p.putUInt  ("sn",    (uint32_t)newCfg.subnet);
-    p.putUInt  ("dns",   (uint32_t)newCfg.dns);
+    p.putUInt  ("dns",   (uint32_t)newCfg.dns1);
+    p.putUInt  ("dns2",  (uint32_t)newCfg.dns2);
     p.putString("token", newCfg.tcpToken);
     p.putUShort("port",  newCfg.tcpPort);
     p.end();
@@ -205,7 +207,7 @@ static bool attemptSTA() {
     WiFi.mode(WIFI_STA);
     WiFi.setHostname(effectiveHostname.c_str());
     if (cfg.useStaticIP) {
-        WiFi.config(cfg.staticIP, cfg.gateway, cfg.subnet, cfg.dns);
+        WiFi.config(cfg.staticIP, cfg.gateway, cfg.subnet, cfg.dns1, cfg.dns2);
     }
     WiFi.begin(cfg.ssid.c_str(), cfg.password.c_str());
     currentMode = Mode::STA_CONNECTING;

@@ -24,7 +24,8 @@ struct Config {
     IPAddress staticIP;
     IPAddress gateway;
     IPAddress subnet;
-    IPAddress dns;
+    IPAddress dns1;
+    IPAddress dns2;
     String    tcpToken;  // empty = no auth required
     uint16_t  tcpPort;   // default 5055
 };

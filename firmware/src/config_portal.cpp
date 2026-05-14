@@ -116,8 +116,10 @@ static void handleRoot() {
     html += "<input type='text' name='gw' value='" + cfg.gateway.toString() + "' placeholder='192.168.1.1'>";
     html += F("<label>Subnet mask</label>");
     html += "<input type='text' name='sn' value='" + cfg.subnet.toString() + "' placeholder='255.255.255.0'>";
-    html += F("<label>DNS</label>");
-    html += "<input type='text' name='dns' value='" + cfg.dns.toString() + "' placeholder='1.1.1.1'>";
+    html += F("<label>DNS 1</label>");
+    html += "<input type='text' name='dns1' value='" + cfg.dns1.toString() + "' placeholder='1.1.1.1'>";
+    html += F("<label>DNS 2</label>");
+    html += "<input type='text' name='dns2' value='" + cfg.dns2.toString() + "' placeholder='8.8.8.8'>";
 
     html += F("<hr>");
     html += F("<label>Hostname <span class='hint'>(optional; blank = default mDNS name)</span></label>");
@@ -154,7 +156,8 @@ static void handleSave() {
     newCfg.staticIP    = parseIP(server->arg("ip"));
     newCfg.gateway     = parseIP(server->arg("gw"));
     newCfg.subnet      = parseIP(server->arg("sn"));
-    newCfg.dns         = parseIP(server->arg("dns"));
+    newCfg.dns1        = parseIP(server->arg("dns1"));
+    newCfg.dns2        = parseIP(server->arg("dns2"));
     newCfg.tcpToken    = server->arg("token");
     newCfg.hostname    = server->arg("hostname");
     newCfg.hostname.trim();

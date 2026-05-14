@@ -82,6 +82,12 @@ static void sendSimplePage(const __FlashStringHelper* title,
     body += F("</p><p><a href='/'>Back to OTA page</a></p></body></html>");
     httpServer->send(200, "text/html; charset=utf-8", body);
 }
+
+static IPAddress parseIPArg(const String& s) {
+    IPAddress ip;
+    if (!ip.fromString(s)) ip = IPAddress((uint32_t)0);
+    return ip;
+}
 // ─── Rollback sanity check ──────────────────────────────────
 //
 // When ESP-IDF boots from a newly-written slot, otadata marks it as
@@ -164,26 +170,45 @@ static void handleRoot() {
               "</form>"
               "<p class='m'>CLI alternative: "
               "<code>curl -u admin:&lt;password&gt; -F firmware=@firmware.bin http://");
-    body += hostname + ".local/update</code></p>"
-            "<hr>"
-            "<h3>Hostname</h3>"
-            "<form method='POST' action='/hostname'>"
-            "<label>mDNS / OTA hostname</label>"
-            "<input type='text' name='hostname' autocomplete='off' maxlength='32' value='" +
+    body += hostname + ".local/update</code></p>";
+    body += F("<hr>"
+              "<h3>Hostname</h3>"
+              "<form method='POST' action='/hostname'>"
+              "<label>mDNS / OTA hostname</label>");
+    body += "<input type='text' name='hostname' autocomplete='off' maxlength='32' value='" +
             cfg.hostname +
-            "' placeholder='leave blank for default'>"
-            "<button type='submit'>Save hostname</button>"
-            "</form>"
-            "<p class='m'>Blank resets to the board default. Reboot required.</p>"
-            "<hr>"
-            "<h3>pyMC Token</h3>"
-            "<form method='POST' action='/token'>"
-            "<label>New pyMC token</label>"
-            "<input type='password' name='token' autocomplete='new-password' maxlength='64'>"
-            "<label>Confirm pyMC token</label>"
-            "<input type='password' name='confirm' autocomplete='new-password' maxlength='64'>"
-            "<button type='submit'>Save pyMC token</button>"
-            "</form>";
+            "' placeholder='leave blank for default'>";
+    body += F("<button type='submit'>Save hostname</button>"
+              "</form>"
+              "<p class='m'>Blank resets to the board default. Reboot required.</p>"
+              "<hr>"
+              "<h3>Network</h3>"
+              "<form method='POST' action='/network'>");
+    body += F("<label><input type='checkbox' name='static' value='1'");
+    if (cfg.useStaticIP) body += F(" checked");
+    body += F("> Use static IP (otherwise DHCP)</label>"
+              "<label>Static IP</label>");
+    body += "<input type='text' name='ip' value='" + cfg.staticIP.toString() + "' placeholder='192.168.1.42'>";
+    body += F("<label>Subnet mask</label>");
+    body += "<input type='text' name='sn' value='" + cfg.subnet.toString() + "' placeholder='255.255.255.0'>";
+    body += F("<label>Gateway</label>");
+    body += "<input type='text' name='gw' value='" + cfg.gateway.toString() + "' placeholder='192.168.1.1'>";
+    body += F("<label>DNS 1</label>");
+    body += "<input type='text' name='dns1' value='" + cfg.dns1.toString() + "' placeholder='1.1.1.1'>";
+    body += F("<label>DNS 2</label>");
+    body += "<input type='text' name='dns2' value='" + cfg.dns2.toString() + "' placeholder='8.8.8.8'>";
+    body += F("<button type='submit'>Save network settings</button>"
+              "</form>"
+              "<p class='m'>Default is DHCP. Static settings apply after reboot.</p>"
+              "<hr>");
+    body += F("<h3>pyMC Token</h3>"
+              "<form method='POST' action='/token'>"
+              "<label>New pyMC token</label>"
+              "<input type='password' name='token' autocomplete='new-password' maxlength='64'>"
+              "<label>Confirm pyMC token</label>"
+              "<input type='password' name='confirm' autocomplete='new-password' maxlength='64'>"
+              "<button type='submit'>Save pyMC token</button>"
+              "</form>");
     body += "<p class='m'>Current mode: <b>";
     body += cfg.tcpToken.length() > 0 ? "protected" : "open";
     body += F("</b>. This token must match the <code>token</code> value in pyMC so pyMC can connect to the radio. Leave both fields blank to clear it. Reboot required.</p>"
@@ -226,6 +251,40 @@ static void handleHostnameSave() {
                     "<p><a href='/'>Back to OTA page</a></p>"
                     "</body></html>");
     httpServer->send(200, "text/html; charset=utf-8", body);
+    delay(500);
+    ESP.restart();
+}
+
+static void handleNetworkSave() {
+    if (!checkAuth()) return;
+
+    WifiManager::Config cfg = WifiManager::getConfig();
+    cfg.useStaticIP = httpServer->hasArg("static");
+    cfg.staticIP    = parseIPArg(httpServer->arg("ip"));
+    cfg.subnet      = parseIPArg(httpServer->arg("sn"));
+    cfg.gateway     = parseIPArg(httpServer->arg("gw"));
+    cfg.dns1        = parseIPArg(httpServer->arg("dns1"));
+    cfg.dns2        = parseIPArg(httpServer->arg("dns2"));
+
+    if (cfg.useStaticIP) {
+        if ((uint32_t)cfg.staticIP == 0 || (uint32_t)cfg.subnet == 0 || (uint32_t)cfg.gateway == 0) {
+            httpServer->send(400, "text/plain",
+                             "Static IP, subnet, and gateway are required when static mode is enabled.\n");
+            return;
+        }
+    }
+
+    WifiManager::saveConfig(cfg);
+
+    Serial.printf("[OTA] network config updated by %s -> %s\n",
+                  httpServer->client().remoteIP().toString().c_str(),
+                  cfg.useStaticIP ? "static" : "dhcp");
+
+    sendSimplePage(F("Network saved"),
+                   F("Network saved"),
+                   cfg.useStaticIP
+                       ? F("The modem will reboot now and come back using the configured static network settings.")
+                       : F("The modem will reboot now and come back using DHCP."));
     delay(500);
     ESP.restart();
 }
@@ -375,6 +434,7 @@ void begin(const String& hn, const String& tk) {
     httpServer = new WebServer(HTTP_PORT);
     httpServer->on("/",       HTTP_GET,  handleRoot);
     httpServer->on("/hostname", HTTP_POST, handleHostnameSave);
+    httpServer->on("/network", HTTP_POST, handleNetworkSave);
     httpServer->on("/token",  HTTP_POST, handleTokenSave);
     httpServer->on("/auth",   HTTP_POST, handleAuthSave);
     httpServer->on("/update", HTTP_POST, handleUpdateResult, handleUpdateUpload);

@@ -56,7 +56,13 @@ static void resetPhy(int8_t rst_pin) {
     delay(50);   // datasheet: IP101 needs ≥10 ms after RST deassert
 }
 
-void begin(const char* hostname) {
+void begin(const char* hostname,
+           bool useStaticIP,
+           const IPAddress& staticIP,
+           const IPAddress& gateway,
+           const IPAddress& subnet,
+           const IPAddress& dns1,
+           const IPAddress& dns2) {
     if (!BOARD.ethernet.enabled) return;
 
     const auto& e = BOARD.ethernet;
@@ -83,14 +89,20 @@ void begin(const char* hostname) {
     }
 
     // Apply static IP BEFORE begin() — same idiom as WiFi.config().
-    // When use_static_ip is false the call is skipped and DHCP is used.
-    if (e.use_static_ip) {
-        IPAddress ip   (e.static_ip[0], e.static_ip[1], e.static_ip[2], e.static_ip[3]);
-        IPAddress gw   (e.gateway[0],   e.gateway[1],   e.gateway[2],   e.gateway[3]);
-        IPAddress sn   (e.subnet[0],    e.subnet[1],    e.subnet[2],    e.subnet[3]);
-        IPAddress dns1 (e.dns[0],       e.dns[1],       e.dns[2],       e.dns[3]);
-        ETH.config(ip, gw, sn, dns1);
+    // Runtime config wins; otherwise the board-level static config is used.
+    if (useStaticIP) {
+        ETH.config(staticIP, gateway, subnet, dns1, dns2);
         Serial.printf("[ETH] static cfg %u.%u.%u.%u/%u.%u.%u.%u gw=%u.%u.%u.%u\n",
+                      staticIP[0], staticIP[1], staticIP[2], staticIP[3],
+                      subnet[0], subnet[1], subnet[2], subnet[3],
+                      gateway[0], gateway[1], gateway[2], gateway[3]);
+    } else if (e.use_static_ip) {
+        IPAddress ip  (e.static_ip[0], e.static_ip[1], e.static_ip[2], e.static_ip[3]);
+        IPAddress gw  (e.gateway[0],   e.gateway[1],   e.gateway[2],   e.gateway[3]);
+        IPAddress sn  (e.subnet[0],    e.subnet[1],    e.subnet[2],    e.subnet[3]);
+        IPAddress bd1 (e.dns[0],       e.dns[1],       e.dns[2],       e.dns[3]);
+        ETH.config(ip, gw, sn, bd1);
+        Serial.printf("[ETH] board static cfg %u.%u.%u.%u/%u.%u.%u.%u gw=%u.%u.%u.%u\n",
                       ip[0], ip[1], ip[2], ip[3],
                       sn[0], sn[1], sn[2], sn[3],
                       gw[0], gw[1], gw[2], gw[3]);
@@ -182,7 +194,8 @@ const char* getMACString() {
 #else  // !CONFIG_ETH_USE_ESP32_EMAC — chip has no internal EMAC
 
 namespace EthernetManager {
-void        begin(const char*) {}
+void        begin(const char*, bool, const IPAddress&, const IPAddress&, const IPAddress&,
+                  const IPAddress&, const IPAddress&) {}
 void        end()          {}
 void        loop()         {}
 bool        isLinkUp()     { return false; }
