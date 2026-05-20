@@ -105,11 +105,16 @@ namespace EthernetManager {
     inline bool hasIP()    { return false; }
     inline const char* getIPString() { return "---"; }
 }
-// Real display driver on nRF52: the Heltec T114 ships with an
-// LH114T-IF03 TFT-LCD (ST7789, 135×240). The class name stays
-// `OledDisplay` to keep main.cpp's call sites uniform across
-// boards even though the underlying panel is a TFT.
-#include "tft_display.h"
+// Per-board display driver on nRF52 boards. T114 ships with an
+// LH114T-IF03 TFT-LCD (ST7789, 135×240); the XIAO nRF52840 +
+// Wio-SX1262 kit ships with no display at all. The class name
+// stays `OledDisplay` regardless so main.cpp's call sites
+// compile unchanged.
+#if defined(BOARD_HELTEC_T114)
+#  include "tft_display.h"
+#else
+#  include "display_stub.h"
+#endif
 // Tiny WiFi.* stand-in — only methods main.cpp actually calls when
 // has_wifi happens to be true; the firmware branches gate them on
 // runtime state which is always false on the T114.

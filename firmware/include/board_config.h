@@ -183,6 +183,8 @@ extern const BoardConfig BOARD;
 #  include "boards/heltec_t114.h"
 #elif defined(BOARD_XIAO_WIO_SX1262)
 #  include "boards/xiao_wio_sx1262.h"
+#elif defined(BOARD_XIAO_NRF52_WIO)
+#  include "boards/xiao_nrf52_wio.h"
 #else
-#  error "No board selected — add one of -DBOARD_HELTEC_V3 / -DBOARD_IKOKA_STICK / -DBOARD_LILYGO_T3S3 / -DBOARD_RAK3112_WISMESH / -DBOARD_ESP32_P4_NANO / -DBOARD_HELTEC_T114 / -DBOARD_XIAO_WIO_SX1262 to platformio.ini build_flags"
+#  error "No board selected — add one of -DBOARD_HELTEC_V3 / -DBOARD_IKOKA_STICK / -DBOARD_LILYGO_T3S3 / -DBOARD_RAK3112_WISMESH / -DBOARD_ESP32_P4_NANO / -DBOARD_HELTEC_T114 / -DBOARD_XIAO_WIO_SX1262 / -DBOARD_XIAO_NRF52_WIO to platformio.ini build_flags"
 #endif

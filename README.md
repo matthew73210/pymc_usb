@@ -88,6 +88,7 @@ Per-board highlights (full pin numbers in the headers, mDNS prefix is
 - **RAK3112 WisMesh** — SX1262 inside the RAK3112 module, no OLED.
 - **WaveShare ESP32-P4-Nano** — RISC-V P4 + C6 + IP101GRI Ethernet PHY + off-board E22, runtime ETH-or-Wi-Fi (never both, see below).
 - **Heltec T114** — nRF52840 + bare SX1262 + ST7789 TFT 135×240, **no Wi-Fi/TCP/network OTA**; USB-CDC + UART transport only, OTA via Adafruit nRF52 DFU (USB) or in-app `CMD_OTA_*` over the protocol transport.
+- **Seeed XIAO nRF52840 + Wio-SX1262** (SKU 102010710) — XIAO nRF52840 + bare SX1262 on the Wio-SX1262 carrier, BLE 5.0 hardware unused, **no Wi-Fi/TCP/network OTA**, no display; native USB-CDC transport only, OTA via Adafruit nRF52 DFU (UF2 disk on double-click reset) or in-app `CMD_OTA_*`.
 
 ### E22-P RF switch (Ikoka, P4-Nano + E22P)
 
