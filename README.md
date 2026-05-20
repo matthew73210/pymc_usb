@@ -150,6 +150,31 @@ T114 has no IP stack at all — the only paths in are USB-CDC and the
 secondary UART, and updates are either Adafruit DFU over USB or the
 in-app `OTA_*` commands carried over the same transport.
 
+### Web UI / OTA / JSON API authentication (v0.8+)
+
+From v0.8 the HTTP surface (web management page, OTA `/update`, and
+the `/api/*` JSON endpoints) is gated by HTTP Basic Auth. Defaults on
+first boot:
+
+- **user:** `admin`
+- **password:** `password`
+
+Change the password via the **Change HTTP password** form in the web
+UI; it is persisted in NVS under `http_pass`. ArduinoOTA (espota) uses
+the same password as its `--auth` token. Examples:
+
+```bash
+# Open the web UI (browser)         → http://<host>/         (admin / password)
+# Pull live stats                   → curl -u admin:password http://<host>/api/stats
+# Flash a new firmware over HTTP    → curl -u admin:password \
+#       -F firmware=@firmware/<env>/firmware.bin http://<host>/update
+# Flash over espota via PlatformIO  → pio run -e <env> -t upload \
+#       --upload-port <host> --upload-flags="--auth=password"
+```
+
+Pre-v0.8 firmware used `heltec:<tcp_token>` on `/update` only — that
+scheme is gone, the same credential pair now covers every HTTP path.
+
 ## Wire protocol v0.7
 
 *(Full command list in `firmware/include/protocol.h`; the section below is
