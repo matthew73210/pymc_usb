@@ -89,12 +89,14 @@ Once the board is on the LAN (Wi-Fi STA or Ethernet) and visible via mDNS:
 cd firmware
 pio run -e <env> -t upload --upload-port <env-stem>-<mac3>.local
 # or HTTP directly:
-curl -F firmware=@.pio/build/<env>/firmware.bin \
+curl -u admin:password -F firmware=@.pio/build/<env>/firmware.bin \
      http://<env-stem>-<mac3>.local/update
 ```
 
 Hostname stems are listed in §1 (e.g. `heltec`, `ikoka`,
 `lilygo-t3s3`, `rak3112`, `p4nano`). The board reboots after upload.
+The HTTP OTA page uses Basic Auth with username `admin` and default
+password `password`; change it from the OTA page after first network boot.
 Rollback is **not** automatic on a broken image — keep the USB cable
 as a recovery fallback.
 
