@@ -89,6 +89,12 @@ cp "$REPO_DIR/pymc_driver/tcp_radio.py" "$PYMC_HW/tcp_radio.py"
 chmod 644 "$PYMC_HW/tcp_radio.py"
 echo -e "  ${GREEN}Installed: $PYMC_HW/tcp_radio.py${NC}"
 
+# Shared protocol constants (frame markers, CMD_* codes, error codes) —
+# imported by both usb_radio.py and tcp_radio.py.
+cp "$REPO_DIR/pymc_driver/protocol_constants.py" "$PYMC_HW/protocol_constants.py"
+chmod 644 "$PYMC_HW/protocol_constants.py"
+echo -e "  ${GREEN}Installed: $PYMC_HW/protocol_constants.py${NC}"
+
 # Verify imports work
 "$PYMC_PYTHON" -c "from pymc_core.hardware.usb_radio import USBLoRaRadio; print('  USB import OK')" || {
     echo -e "${RED}ERROR: USBLoRaRadio import failed${NC}"
