@@ -290,6 +290,40 @@ static void rfSwitchEnLowAtBoot() {
     enLowStartedMs = millis();
 }
 
+static void writeOutputPin(int8_t pin, bool high) {
+    if (pin < 0) return;
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, high ? HIGH : LOW);
+}
+
+static void rfSwitchFemInitAtBoot() {
+    if (!BOARD.has_lora_radio) return;
+    const auto& sw = BOARD.rf_switch;
+
+    writeOutputPin(sw.fem_power_pin, sw.fem_power_active_high);
+    if (sw.fem_power_pin >= 0 && sw.fem_power_settle_ms > 0) {
+        delay(sw.fem_power_settle_ms);
+    }
+    writeOutputPin(sw.fem_enable_pin, sw.fem_enable_active_high);
+    writeOutputPin(sw.fem_mode_pin, sw.fem_mode_rx_high);
+}
+
+static void rfSwitchFemBeforeTransmit() {
+    if (!BOARD.has_lora_radio) return;
+    const auto& sw = BOARD.rf_switch;
+
+    writeOutputPin(sw.fem_enable_pin, sw.fem_enable_active_high);
+    writeOutputPin(sw.fem_mode_pin, sw.fem_mode_tx_high);
+}
+
+static void rfSwitchFemAfterTransmit() {
+    if (!BOARD.has_lora_radio) return;
+    const auto& sw = BOARD.rf_switch;
+
+    writeOutputPin(sw.fem_enable_pin, sw.fem_enable_active_high);
+    writeOutputPin(sw.fem_mode_pin, sw.fem_mode_rx_high);
+}
+
 static void rfSwitchEnHighAfterSettle() {
     if (!BOARD.has_lora_radio) return;
     if (BOARD.rf_switch.en_pin < 0) return;
@@ -708,6 +742,7 @@ void processHostCommand(uint8_t cmd, const uint8_t* payload, uint16_t len,
         }
 
         dio1Flag = false;
+        rfSwitchFemBeforeTransmit();
         int state = radio.startTransmit((uint8_t*)payload, len);
         LOG_R_INFO("TX_REQUEST len=%u src=%u state=%d",
                    (unsigned)len, (unsigned)src, state);
@@ -715,6 +750,7 @@ void processHostCommand(uint8_t cmd, const uint8_t* payload, uint16_t len,
             LOG_R_ERR("startTransmit() failed, state=%d", state);
             isTxActive = false;
             radio.finishTransmit();
+            rfSwitchFemAfterTransmit();
             sendError(ERR_TX_TIMEOUT, src);
             startReceive();
             break;
@@ -736,6 +772,7 @@ void processHostCommand(uint8_t cmd, const uint8_t* payload, uint16_t len,
 
         bool txOk = dio1Flag;
         radio.finishTransmit();
+        rfSwitchFemAfterTransmit();
         dio1Flag = false;
         isTxActive = false;
         lastPacketTime = millis();
@@ -1121,6 +1158,7 @@ void setup() {
     // below makes sure the full board.en_low_hold_ms has elapsed
     // before SPI traffic begins.
     rfSwitchEnLowAtBoot();
+    rfSwitchFemInitAtBoot();
 
 #if defined(BOARD_HELTEC_T114)
     // Restore non-volatile T114 state BEFORE radio init so we know

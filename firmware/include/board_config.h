@@ -44,12 +44,25 @@
 //                     involvement. Heltec V3 uses DIO2 for the
 //                     SX1262's internal switch; Ikoka Stick wires
 //                     DIO2 ↔ TXEN externally.
+//
+//   fem_*             Optional GPIOs for an external RF front-end that
+//                     needs one always-on power line, one always-enabled
+//                     shutdown/enable line, and/or one GPIO that
+//                     selects TX vs RX/bypass. Pins set to -1 are skipped.
 struct RfSwitchPolicy {
     int8_t   en_pin;
     uint16_t en_low_hold_ms;
     int8_t   rx_pin;
     int8_t   tx_pin;
     bool     dio2_as_rf_switch;
+    int8_t   fem_power_pin = -1;
+    bool     fem_power_active_high = true;
+    uint16_t fem_power_settle_ms = 0;
+    int8_t   fem_enable_pin = -1;
+    bool     fem_enable_active_high = true;
+    int8_t   fem_mode_pin = -1;
+    bool     fem_mode_tx_high = true;
+    bool     fem_mode_rx_high = true;
 };
 
 // ─── Full per-board config ──────────────────────────────────
@@ -181,10 +194,12 @@ extern const BoardConfig BOARD;
 #  include "boards/esp32_p4_nano.h"
 #elif defined(BOARD_HELTEC_T114)
 #  include "boards/heltec_t114.h"
+#elif defined(BOARD_HELTEC_TRACKER_V2)
+#  include "boards/heltec_tracker_v2.h"
 #elif defined(BOARD_XIAO_WIO_SX1262)
 #  include "boards/xiao_wio_sx1262.h"
 #elif defined(BOARD_XIAO_NRF52_WIO)
 #  include "boards/xiao_nrf52_wio.h"
 #else
-#  error "No board selected — add one of -DBOARD_HELTEC_V3 / -DBOARD_IKOKA_STICK / -DBOARD_LILYGO_T3S3 / -DBOARD_RAK3112_WISMESH / -DBOARD_ESP32_P4_NANO / -DBOARD_HELTEC_T114 / -DBOARD_XIAO_WIO_SX1262 / -DBOARD_XIAO_NRF52_WIO to platformio.ini build_flags"
+#  error "No board selected — add one of -DBOARD_HELTEC_V3 / -DBOARD_IKOKA_STICK / -DBOARD_LILYGO_T3S3 / -DBOARD_RAK3112_WISMESH / -DBOARD_ESP32_P4_NANO / -DBOARD_HELTEC_T114 / -DBOARD_HELTEC_TRACKER_V2 / -DBOARD_XIAO_WIO_SX1262 / -DBOARD_XIAO_NRF52_WIO to platformio.ini build_flags"
 #endif
