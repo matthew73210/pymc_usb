@@ -140,9 +140,22 @@ static String fwVersion;   // populated in setup()
 static constexpr uint32_t LOOP_WDT_TIMEOUT_S = 30;
 
 // ─── Hardware setup ──────────────────────────────────────────
+class PymcSX1262 : public SX1262 {
+public:
+    using SX1262::SX1262;
+
+    int16_t applyRegisterPatch08B5() {
+        uint8_t value = 0;
+        int16_t state = readRegister(0x08B5, &value, 1);
+        if (state != RADIOLIB_ERR_NONE) return state;
+        value |= 0x01;
+        return writeRegister(0x08B5, &value, 1);
+    }
+};
+
 // SX1262 / E22-P pin map comes from BOARD (see boards/<name>.h).
-SX1262 radio = new Module(BOARD.pin_lora_nss, BOARD.pin_lora_dio1,
-                          BOARD.pin_lora_rst, BOARD.pin_lora_busy);
+PymcSX1262 radio = new Module(BOARD.pin_lora_nss, BOARD.pin_lora_dio1,
+                              BOARD.pin_lora_rst, BOARD.pin_lora_busy);
 
 // Single instance regardless of build — on ESP32 this is the real
 // SSD1306 driver from oled_display.cpp; on nRF52 it's a no-op stub
@@ -172,6 +185,7 @@ static bool autoCadEnabled = false;   // pre-TX CAD; enabled via CMD_SET_AUTO_CA
 // A single flag avoids the race where an IRQ that fires at the tail of a TX
 // could leak into the next RX handler or vice-versa.
 static volatile bool dio1Flag    = false;
+static volatile uint32_t dio1IrqCount = 0;
 static bool        radioReady    = false;
 static bool        isTxActive    = false;
 
@@ -267,6 +281,7 @@ IRAM_ATTR
 #endif
 void onDio1Rise() {
     dio1Flag = true;
+    dio1IrqCount = dio1IrqCount + 1;
 }
 
 // ─── E22 RF switch boot sequence ────────────────────────────
@@ -296,6 +311,17 @@ static void writeOutputPin(int8_t pin, bool high) {
     digitalWrite(pin, high ? HIGH : LOW);
 }
 
+static void setTxLed(bool on) {
+    if (BOARD.pin_lora_tx_led < 0) return;
+    bool high = on ? BOARD.lora_tx_led_active_high
+                   : !BOARD.lora_tx_led_active_high;
+    writeOutputPin(BOARD.pin_lora_tx_led, high);
+}
+
+static void txLedInitAtBoot() {
+    setTxLed(false);
+}
+
 static void rfSwitchFemInitAtBoot() {
     if (!BOARD.has_lora_radio) return;
     const auto& sw = BOARD.rf_switch;
@@ -316,12 +342,16 @@ static void rfSwitchFemBeforeTransmit() {
     writeOutputPin(sw.fem_mode_pin, sw.fem_mode_tx_high);
 }
 
-static void rfSwitchFemAfterTransmit() {
+static void rfSwitchFemSetReceive() {
     if (!BOARD.has_lora_radio) return;
     const auto& sw = BOARD.rf_switch;
 
     writeOutputPin(sw.fem_enable_pin, sw.fem_enable_active_high);
     writeOutputPin(sw.fem_mode_pin, sw.fem_mode_rx_high);
+}
+
+static void rfSwitchFemAfterTransmit() {
+    rfSwitchFemSetReceive();
 }
 
 static void rfSwitchEnHighAfterSettle() {
@@ -350,7 +380,8 @@ static void rfSwitchConfigureRadio() {
     // only set dio2_as_rf_switch and leave rx_pin/tx_pin == -1, so the second
     // call becomes a no-op for them.
     if (BOARD.rf_switch.dio2_as_rf_switch) {
-        radio.setDio2AsRfSwitch(true);
+        int state = radio.setDio2AsRfSwitch(true);
+        Serial.printf("[INFO] setDio2AsRfSwitch(true) -> %d\n", state);
     }
     if (BOARD.rf_switch.rx_pin >= 0 || BOARD.rf_switch.tx_pin >= 0) {
         uint32_t rx = BOARD.rf_switch.rx_pin >= 0
@@ -360,6 +391,26 @@ static void rfSwitchConfigureRadio() {
                           ? (uint32_t)BOARD.rf_switch.tx_pin
                           : RADIOLIB_NC;
         radio.setRfSwitchPins(rx, tx);
+        Serial.printf("[INFO] setRfSwitchPins(rx=%lu tx=%lu)\n",
+                      (unsigned long)rx, (unsigned long)tx);
+    }
+}
+
+static void configureBoardRadioOptions() {
+    if (BOARD.sx126x_current_limit_ma > 0) {
+        int state = radio.setCurrentLimit(BOARD.sx126x_current_limit_ma);
+        Serial.printf("[INFO] setCurrentLimit(%d mA) -> %d\n",
+                      (int)BOARD.sx126x_current_limit_ma, state);
+    }
+
+    if (BOARD.sx126x_rx_boosted_gain) {
+        int state = radio.setRxBoostedGainMode(true);
+        Serial.printf("[INFO] setRxBoostedGainMode(true) -> %d\n", state);
+    }
+
+    if (BOARD.sx126x_register_patch) {
+        int state = radio.applyRegisterPatch08B5();
+        Serial.printf("[INFO] SX126x register patch 0x08B5 -> %d\n", state);
     }
 }
 
@@ -608,6 +659,7 @@ bool startReceive() {
     // which re-runs applyConfig() and then calls this function
     // again with radioStandby=false.
     if (radioStandby) return true;
+    rfSwitchFemSetReceive();
     return radio.startReceive() == RADIOLIB_ERR_NONE;
 }
 
@@ -742,7 +794,9 @@ void processHostCommand(uint8_t cmd, const uint8_t* payload, uint16_t len,
         }
 
         dio1Flag = false;
+        uint32_t irqStart = dio1IrqCount;
         rfSwitchFemBeforeTransmit();
+        setTxLed(true);
         int state = radio.startTransmit((uint8_t*)payload, len);
         LOG_R_INFO("TX_REQUEST len=%u src=%u state=%d",
                    (unsigned)len, (unsigned)src, state);
@@ -751,6 +805,7 @@ void processHostCommand(uint8_t cmd, const uint8_t* payload, uint16_t len,
             isTxActive = false;
             radio.finishTransmit();
             rfSwitchFemAfterTransmit();
+            setTxLed(false);
             sendError(ERR_TX_TIMEOUT, src);
             startReceive();
             break;
@@ -773,6 +828,7 @@ void processHostCommand(uint8_t cmd, const uint8_t* payload, uint16_t len,
         bool txOk = dio1Flag;
         radio.finishTransmit();
         rfSwitchFemAfterTransmit();
+        setTxLed(false);
         dio1Flag = false;
         isTxActive = false;
         lastPacketTime = millis();
@@ -791,7 +847,8 @@ void processHostCommand(uint8_t cmd, const uint8_t* payload, uint16_t len,
         } else {
             // Hard TX timeout — the SX1262 is likely stuck in a bad state.
             // Rebuild from scratch: standby → re-apply full config → RX.
-            LOG_R_ERR("TX hard timeout (%u bytes) — resetting radio", (unsigned)len);
+            LOG_R_ERR("TX hard timeout (%u bytes, dio1_delta=%lu) — resetting radio",
+                      (unsigned)len, (unsigned long)(dio1IrqCount - irqStart));
             radio.standby();
             delay(5);
             applyConfig(currentConfig);
@@ -1159,6 +1216,7 @@ void setup() {
     // before SPI traffic begins.
     rfSwitchEnLowAtBoot();
     rfSwitchFemInitAtBoot();
+    txLedInitAtBoot();
 
 #if defined(BOARD_HELTEC_T114)
     // Restore non-volatile T114 state BEFORE radio init so we know
@@ -1271,7 +1329,13 @@ void setup() {
 #endif
         }
 
+        LOG_R_INFO("radio.begin nss=%d dio1=%d rst=%d busy=%d spi=(%d,%d,%d)",
+                   (int)BOARD.pin_lora_nss, (int)BOARD.pin_lora_dio1,
+                   (int)BOARD.pin_lora_rst, (int)BOARD.pin_lora_busy,
+                   (int)BOARD.pin_lora_sck, (int)BOARD.pin_lora_miso,
+                   (int)BOARD.pin_lora_mosi);
         int state = radio.begin();
+        LOG_R_INFO("radio.begin -> %d", state);
         if (state != RADIOLIB_ERR_NONE) {
             oled.showError("SX1262 init fail!");
             while (Serial.availableForWrite() == 0) delay(10);
@@ -1282,8 +1346,12 @@ void setup() {
             while (true) delay(1000);
         }
 
-        if (BOARD.use_dio3_tcxo) radio.setTCXO(BOARD.tcxo_voltage);
+        if (BOARD.use_dio3_tcxo) {
+            state = radio.setTCXO(BOARD.tcxo_voltage);
+            LOG_R_INFO("setTCXO(%.1f V) -> %d", BOARD.tcxo_voltage, state);
+        }
         rfSwitchConfigureRadio();
+        configureBoardRadioOptions();
 
         if (!applyConfig(currentConfig)) {
             oled.showError("Config fail!");
@@ -1292,6 +1360,7 @@ void setup() {
         }
 
         radio.setDio1Action(onDio1Rise);
+        LOG_R_INFO("DIO1 IRQ attached on GPIO%d", (int)BOARD.pin_lora_dio1);
 
         if (!startReceive()) {
             oled.showError("RX start fail!");

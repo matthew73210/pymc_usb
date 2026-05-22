@@ -86,6 +86,10 @@ struct BoardConfig {
 
     RfSwitchPolicy rf_switch;
 
+    // Optional LoRa TX activity LED. Boards without one leave pin at -1.
+    int8_t pin_lora_tx_led = -1;
+    bool   lora_tx_led_active_high = true;
+
     // I2C bus for the SSD1306 OLED (same driver across all boards).
     int8_t pin_i2c_sda;
     int8_t pin_i2c_scl;
@@ -109,6 +113,11 @@ struct BoardConfig {
     // 32 MHz TCXO powered by SX1262 DIO3 at 1.8 V.
     bool  use_dio3_tcxo;
     float tcxo_voltage;
+
+    // Optional SX126x board-level tuning applied after radio.begin().
+    int16_t sx126x_current_limit_ma = -1;
+    bool    sx126x_rx_boosted_gain = false;
+    bool    sx126x_register_patch = false;
 
     // Some carriers (ESP32-P4-Nano) ship without an SX1262 — the
     // module is added later. When false, main.cpp / wifi_manager skip

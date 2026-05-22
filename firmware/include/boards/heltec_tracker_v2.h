@@ -33,6 +33,9 @@ inline const BoardConfig BOARD = {
         .fem_mode_rx_high   = true,   // LNA bypass, matching MeshCore default
     },
 
+    .pin_lora_tx_led = 18,
+    .lora_tx_led_active_high = true,
+
     // Tracker V2 has a TFT/GPS VEXT rail, not the SSD1306 OLED used by this
     // firmware. Leave display pins disabled; do not power GPS/display VEXT.
     .pin_i2c_sda      = -1,
@@ -50,6 +53,9 @@ inline const BoardConfig BOARD = {
 
     .use_dio3_tcxo = true,
     .tcxo_voltage  = 1.8f,
+    .sx126x_current_limit_ma = 140,
+    .sx126x_rx_boosted_gain = true,
+    .sx126x_register_patch = true,
 
     .has_lora_radio = true,
     .has_wifi       = true,
