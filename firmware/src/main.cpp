@@ -33,7 +33,11 @@
 #  include <esp_task_wdt.h>
 #  include <esp_system.h>
 #  include <esp_mac.h>
-#  include "oled_display.h"
+#  if defined(BOARD_HELTEC_TRACKER_V2)
+#    include "tft_display.h"
+#  else
+#    include "oled_display.h"
+#  endif
 #  include "wifi_manager.h"
 #  include "tcp_server.h"
 #  include "ota_manager.h"

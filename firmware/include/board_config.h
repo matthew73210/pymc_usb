@@ -101,6 +101,17 @@ struct BoardConfig {
     // this at -1 so the firmware skips the dance.
     int8_t pin_vext_enable_low;
 
+    // Optional SPI TFT. Boards without one leave these pins at -1.
+    int8_t pin_tft_sda = -1;
+    int8_t pin_tft_scl = -1;
+    int8_t pin_tft_dc = -1;
+    int8_t pin_tft_rst = -1;
+    int8_t pin_tft_cs = -1;
+    int8_t pin_tft_bl = -1;
+    bool   tft_bl_active_high = true;
+    int8_t pin_tft_power = -1;
+    bool   tft_power_active_high = true;
+
     // PRG / user button. active_low = pressed pulls LOW.
     int8_t pin_user_button;
     bool   user_button_active_low;
