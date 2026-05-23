@@ -28,12 +28,22 @@ inline const BoardConfig BOARD = {
     .pin_lora_tx_led = 18,
     .lora_tx_led_active_high = true,
 
-    // Tracker V2 has a TFT/GPS VEXT rail, not the SSD1306 OLED used by this
-    // firmware. Leave display pins disabled; do not power GPS/display VEXT.
+    // Tracker V2 uses an ST7735 TFT on a dedicated write-only SPI bus.
+    // VEXT powers the display/GPS peripheral rail; this build only claims
+    // it while the display is on.
     .pin_i2c_sda      = -1,
     .pin_i2c_scl      = -1,
     .pin_i2c_oled_rst = -1,
     .pin_vext_enable_low = -1,
+    .pin_tft_sda = 42,
+    .pin_tft_scl = 41,
+    .pin_tft_dc  = 40,
+    .pin_tft_rst = 39,
+    .pin_tft_cs  = 38,
+    .pin_tft_bl  = 21,
+    .tft_bl_active_high = true,
+    .pin_tft_power = 3,
+    .tft_power_active_high = true,
 
     .pin_user_button        = 0,
     .user_button_active_low = true,
