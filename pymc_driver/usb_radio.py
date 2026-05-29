@@ -149,9 +149,11 @@ class USBLoRaRadio(_RadioBase):
         # Stats
         self._tx_count = 0
         self._rx_count = 0
+        self._last_sync_read_diag: dict[str, int] = {}
 
         logger.info(
-            f"USBLoRaRadio configured: port={port}, freq={frequency/1e6:.1f}MHz, "
+            f"USBLoRaRadio configured: port={port}, baudrate={baudrate}, "
+            f"freq={frequency/1e6:.1f}MHz, "
             f"sf={spreading_factor}, bw={bandwidth/1000:.0f}kHz, "
             f"power={tx_power}dBm, syncword=0x{sync_word:04X}"
         )
@@ -180,12 +182,31 @@ class USBLoRaRadio(_RadioBase):
             self._serial.write_timeout = 2.0
             self._serial.dsrdtr = True
             self._serial.rtscts = False
+            logger.info(
+                "Opening pymc_usb serial port %s at %s baud "
+                "(timeout=%.1fs, write_timeout=%.1fs, dsrdtr=%s, rtscts=%s)",
+                self.port,
+                self.baudrate,
+                self._serial.timeout,
+                self._serial.write_timeout,
+                self._serial.dsrdtr,
+                self._serial.rtscts,
+            )
             self._serial.open()
 
             # Short settle in case the caller just power-cycled the device.
             time.sleep(0.3)
+            waiting_before_reset = self._serial.in_waiting
             self._serial.reset_input_buffer()
-            logger.info(f"Serial connected to {self.port}")
+            logger.info(
+                "pymc_usb serial opened: port=%s baudrate=%s "
+                "dtr=%s rts=%s discarded_startup_bytes=%s",
+                self.port,
+                self.baudrate,
+                getattr(self._serial, "dtr", None),
+                getattr(self._serial, "rts", None),
+                waiting_before_reset,
+            )
 
             # 35 s covers the worst-case WifiManager::begin() STA-timeout if
             # the host opens the port right after a cold boot.
@@ -685,11 +706,31 @@ class USBLoRaRadio(_RadioBase):
             self.preamble_length,
         )
         frame = build_frame(CMD_SET_CONFIG, payload)
-        self._serial.write(frame)
+        logger.info(
+            "pymc_usb startup TX CMD_SET_CONFIG: frame_len=%d payload_len=%d "
+            "freq=%d bw=%d sf=%d cr=%d power=%d sync=0x%04X pre=%d",
+            len(frame),
+            len(payload),
+            self.frequency,
+            self.bandwidth,
+            self.spreading_factor,
+            self.coding_rate,
+            self.tx_power,
+            self.sync_word,
+            self.preamble_length,
+        )
+        logger.debug("pymc_usb startup TX bytes: %s", frame.hex(" "))
+        written = self._serial.write(frame)
+        logger.info(
+            "pymc_usb startup write complete: cmd=0x%02X bytes_written=%s",
+            CMD_SET_CONFIG,
+            written,
+        )
 
         # 10 s covers the worst case where a burst of RX_PACKET frames from
         # nearby MeshCore nodes arrives ahead of CONFIG_RESP and the filter
         # has to skip them.
+        logger.info("pymc_usb waiting for CONFIG_RESP (timeout=10.0s)")
         resp = self._read_frame_sync(timeout=10.0, expect_cmd=CMD_CONFIG_RESP)
         if resp and resp[0] == CMD_CONFIG_RESP:
             logger.info(
@@ -697,13 +738,27 @@ class USBLoRaRadio(_RadioBase):
                 f"BW{self.bandwidth/1000:.0f}kHz {self.tx_power}dBm "
                 f"sync=0x{self.sync_word:04X} pre={self.preamble_length}"
             )
+            logger.debug("pymc_usb CONFIG_RESP payload: %s", resp[1].hex(" "))
             return True
         elif resp and resp[0] == CMD_ERROR:
             err = resp[1][0] if len(resp) > 1 and len(resp[1]) > 0 else 0xFF
             logger.error(f"Config rejected by modem: error 0x{err:02X}")
             return False
         else:
-            logger.error("No config response from modem")
+            diag = self._last_sync_read_diag or {}
+            logger.error(
+                "No valid CONFIG_RESP from pymc_usb modem after startup command "
+                "(bytes_read=%s non_sync_bytes=%s frames_decoded=%s "
+                "crc_errors=%s unexpected_frames=%s short_reads=%s). "
+                "The serial device opened, but the firmware may be silent, "
+                "running incompatible firmware, or using a different transport/protocol.",
+                diag.get("bytes_read", 0),
+                diag.get("non_sync_bytes", 0),
+                diag.get("frames_decoded", 0),
+                diag.get("crc_errors", 0),
+                diag.get("unexpected_frames", 0),
+                diag.get("short_reads", 0),
+            )
             return False
 
     def _read_frame_sync(
@@ -724,19 +779,31 @@ class USBLoRaRadio(_RadioBase):
         # to swallow incoming bytes on macOS + CP2102, so we poll instead.
         self._serial.timeout = 0.2
         deadline = time.time() + timeout
+        diag = {
+            "bytes_read": 0,
+            "non_sync_bytes": 0,
+            "frames_decoded": 0,
+            "crc_errors": 0,
+            "unexpected_frames": 0,
+            "short_reads": 0,
+        }
         try:
             while time.time() < deadline:
                 b = self._serial.read(1)
                 if len(b) == 0:
                     continue
+                diag["bytes_read"] += 1
                 if b[0] != PROTO_SYNC:
+                    diag["non_sync_bytes"] += 1
                     continue
 
                 # A loose 0xAA byte can appear inside an RX_PACKET payload;
                 # if we can't complete the frame (short read / bad CRC),
                 # go back to scanning for the next SYNC instead of bailing.
                 hdr = self._serial.read(3)
+                diag["bytes_read"] += len(hdr)
                 if len(hdr) < 3:
+                    diag["short_reads"] += 1
                     continue
                 cmd = hdr[0]
                 length = struct.unpack("<H", hdr[1:3])[0]
@@ -744,28 +811,43 @@ class USBLoRaRadio(_RadioBase):
                     continue   # garbage length — must be a fake SYNC
 
                 payload = self._serial.read(length) if length > 0 else b""
+                diag["bytes_read"] += len(payload)
                 if len(payload) < length:
+                    diag["short_reads"] += 1
                     continue
 
                 crc_bytes = self._serial.read(2)
+                diag["bytes_read"] += len(crc_bytes)
                 if len(crc_bytes) < 2:
+                    diag["short_reads"] += 1
                     continue
 
                 received_crc = struct.unpack("<H", crc_bytes)[0]
                 computed_crc = crc16_ccitt(hdr + payload)
                 if received_crc != computed_crc:
+                    diag["crc_errors"] += 1
                     logger.debug(
                         f"CRC mismatch (likely fake SYNC in payload): "
                         f"recv=0x{received_crc:04X} comp=0x{computed_crc:04X}"
                     )
                     continue
 
+                diag["frames_decoded"] += 1
+                logger.debug(
+                    "pymc_usb RX frame: cmd=0x%02X payload_len=%d",
+                    cmd,
+                    len(payload),
+                )
                 if expect_cmd is not None and cmd != expect_cmd:
                     if cmd == CMD_ERROR:
+                        self._last_sync_read_diag = diag
                         return (cmd, payload)
+                    diag["unexpected_frames"] += 1
                     continue
 
+                self._last_sync_read_diag = diag
                 return (cmd, payload)
+            self._last_sync_read_diag = diag
             return None
         finally:
             self._serial.timeout = old_timeout

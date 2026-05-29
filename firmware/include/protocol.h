@@ -63,6 +63,18 @@
                                     //   reset_reason(1B) | uptime_ms(4B LE)
                                     //   | free_heap(4B LE) | min_free_heap(4B LE)
                                     //   | last_loop_us(4B LE)
+                                    //   v0.8.1+ may append:
+                                    //   | last_radio_error(i16 LE)
+                                    //   | radio_ready(1B) | rx_mode_active(1B)
+                                    //   v0.8.2+ may append:
+                                    //   | dio1_irq_count(4B) | rx_dio1_count(4B)
+                                    //   | rx_read_fail_count(4B)
+                                    //   | rx_invalid_len_count(4B)
+                                    //   | rx_start_count(4B)
+                                    //   | rx_start_fail_count(4B)
+                                    //   | last_rx_start_ms(4B)
+                                    //   | last_rx_dio1_ms(4B)
+                                    //   | last_instant_rssi_x10(i16 LE)
 #define CMD_RADIO_STANDBY_RESP 0x44 // v0.7 — ack for CMD_RADIO_STANDBY (1B status: 0=ok, 1=fail)
 #define CMD_RADIO_RESUME_RESP  0x46 // v0.7 — ack for CMD_RADIO_RESUME  (1B status: 0=ok, 1=fail)
 #define CMD_SET_DISPLAY_NAME_RESP 0x49 // v0.7 — ack for CMD_SET_DISPLAY_NAME

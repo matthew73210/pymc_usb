@@ -130,7 +130,7 @@ static _WiFiStub WiFi;
 // ─── Version ─────────────────────────────────────────────────
 // Base version is shared by every board; the board's fw_suffix
 // distinguishes one binary from another (e.g. "v0.8.0-ikoka").
-#define FW_VERSION_BASE "v0.8.0"
+#define FW_VERSION_BASE "v0.8.2"
 static String fwVersion;   // populated in setup()
 
 // ─── Task watchdog — self-heal on loop() hang ───────────────
@@ -172,8 +172,19 @@ static bool autoCadEnabled = false;   // pre-TX CAD; enabled via CMD_SET_AUTO_CA
 // A single flag avoids the race where an IRQ that fires at the tail of a TX
 // could leak into the next RX handler or vice-versa.
 static volatile bool dio1Flag    = false;
+static volatile uint32_t dio1IrqCount = 0;
 static bool        radioReady    = false;
 static bool        isTxActive    = false;
+static bool        rxModeActive  = false;
+static int16_t     lastRadioError = RADIOLIB_ERR_NONE;
+static uint32_t    rxDio1Count = 0;
+static uint32_t    rxReadFailCount = 0;
+static uint32_t    rxInvalidLenCount = 0;
+static uint32_t    rxStartCount = 0;
+static uint32_t    rxStartFailCount = 0;
+static uint32_t    lastRxStartMs = 0;
+static uint32_t    lastRxDio1Ms = 0;
+static int16_t     lastInstantRssiX10 = -990;
 
 // ─── Noise floor sampling (mirrors SX1262Radio._sample_noise_floor) ──
 #define NUM_NOISE_FLOOR_SAMPLES 20
@@ -266,6 +277,7 @@ Snapshot capture() {
 IRAM_ATTR
 #endif
 void onDio1Rise() {
+    dio1IrqCount++;
     dio1Flag = true;
 }
 
@@ -527,31 +539,32 @@ static bool parseSetWifi(const uint8_t* p, uint16_t len, WifiManager::Config& ou
 // ─── Radio configuration ────────────────────────────────────
 bool applyConfig(const RadioConfig& cfg) {
     radio.standby();
+    rxModeActive = false;
     int state;
 
     state = radio.setFrequency(cfg.freq_hz / 1e6f);
-    if (state != RADIOLIB_ERR_NONE) return false;
+    if (state != RADIOLIB_ERR_NONE) { lastRadioError = state; return false; }
 
     state = radio.setBandwidth(cfg.bandwidth_hz / 1000.0f);
-    if (state != RADIOLIB_ERR_NONE) return false;
+    if (state != RADIOLIB_ERR_NONE) { lastRadioError = state; return false; }
 
     state = radio.setSpreadingFactor(cfg.sf);
-    if (state != RADIOLIB_ERR_NONE) return false;
+    if (state != RADIOLIB_ERR_NONE) { lastRadioError = state; return false; }
 
     state = radio.setCodingRate(cfg.cr);
-    if (state != RADIOLIB_ERR_NONE) return false;
+    if (state != RADIOLIB_ERR_NONE) { lastRadioError = state; return false; }
 
     // Hardware ceiling per board (E22-P868M30S = 30 dBm, bare SX1262 = 22).
     int8_t pwr = cfg.power_dbm;
     if (pwr > BOARD.max_tx_power_dbm) pwr = BOARD.max_tx_power_dbm;
     state = radio.setOutputPower(pwr);
-    if (state != RADIOLIB_ERR_NONE) return false;
+    if (state != RADIOLIB_ERR_NONE) { lastRadioError = state; return false; }
 
     state = radio.setSyncWord(cfg.syncword);
-    if (state != RADIOLIB_ERR_NONE) return false;
+    if (state != RADIOLIB_ERR_NONE) { lastRadioError = state; return false; }
 
     state = radio.setPreambleLength(cfg.preamble_len);
-    if (state != RADIOLIB_ERR_NONE) return false;
+    if (state != RADIOLIB_ERR_NONE) { lastRadioError = state; return false; }
 
     radio.explicitHeader();
     radio.setCRC(1);
@@ -565,6 +578,7 @@ bool applyConfig(const RadioConfig& cfg) {
     // refresh shows what the radio is actually running.
     oled.setRadioInfo(cfg.freq_hz, cfg.sf, cfg.bandwidth_hz, cfg.cr, pwr,
                      status.last_rssi, status.last_snr);
+    lastRadioError = RADIOLIB_ERR_NONE;
     return true;
 }
 
@@ -573,14 +587,24 @@ bool startReceive() {
     // radio into RX. The flag is cleared by CMD_RADIO_RESUME
     // which re-runs applyConfig() and then calls this function
     // again with radioStandby=false.
-    if (radioStandby) return true;
-    return radio.startReceive() == RADIOLIB_ERR_NONE;
+    if (radioStandby) {
+        rxModeActive = false;
+        return true;
+    }
+    int state = radio.startReceive();
+    rxModeActive = (state == RADIOLIB_ERR_NONE);
+    lastRadioError = state;
+    rxStartCount++;
+    lastRxStartMs = millis();
+    if (!rxModeActive) rxStartFailCount++;
+    return rxModeActive;
 }
 
 // ─── Handle received LoRa packet ────────────────────────────
 void handleLoRaRx() {
     int len = radio.getPacketLength();
     if (len <= 0 || len > MAX_LORA_PAYLOAD) {
+        rxInvalidLenCount++;
         startReceive();
         return;
     }
@@ -589,9 +613,12 @@ void handleLoRaRx() {
     int state = radio.readData(rxBuf, len);
     if (state != RADIOLIB_ERR_NONE) {
         status.crc_errors++;
+        rxReadFailCount++;
+        lastRadioError = state;
         startReceive();
         return;
     }
+    lastRadioError = RADIOLIB_ERR_NONE;
 
     int16_t rssi = (int16_t)radio.getRSSI();
     int16_t snr  = (int16_t)(radio.getSNR() * 10.0f);
@@ -860,8 +887,16 @@ void processHostCommand(uint8_t cmd, const uint8_t* payload, uint16_t len,
     }
 
     case CMD_RX_START: {
-        startReceive();
-        sendFrame(CMD_RX_STARTED, nullptr, 0, src);
+        bool ok = startReceive();
+        if (ok) {
+            uint8_t resp[4];
+            resp[0] = 0;  // status: 0=ok
+            memcpy(&resp[1], &lastRadioError, 2);
+            resp[3] = rxModeActive ? 1 : 0;
+            sendFrame(CMD_RX_STARTED, resp, sizeof(resp), src);
+        } else {
+            sendError(ERR_RADIO_INIT, src);
+        }
         break;
     }
 
@@ -887,7 +922,8 @@ void processHostCommand(uint8_t cmd, const uint8_t* payload, uint16_t len,
 
     case CMD_STATUS_REQ: {
         status.uptime_sec = millis() / 1000;
-        status.radio_state = isTxActive ? 1 : 0;
+        status.radio_state = (!radioReady || lastRadioError != RADIOLIB_ERR_NONE)
+                               ? 2 : (isTxActive ? 1 : 0);
 #ifdef ARDUINO_ARCH_ESP32
         status.temp_c = (int8_t)temperatureRead();
 #else
@@ -950,7 +986,13 @@ void processHostCommand(uint8_t cmd, const uint8_t* payload, uint16_t len,
         // Snapshot for crash-loop diagnosis without a serial cable.
         // Layout: reset_reason(1B) | uptime_ms(4B LE) | free_heap(4B)
         //         | min_free_heap(4B) | last_loop_us(4B)
-        uint8_t buf[17];
+        //         | last_radio_error(i16) | radio_ready(1B) | rx_mode_active(1B)
+        //         | dio1_irq_count(4B) | rx_dio1_count(4B)
+        //         | rx_read_fail_count(4B) | rx_invalid_len_count(4B)
+        //         | rx_start_count(4B) | rx_start_fail_count(4B)
+        //         | last_rx_start_ms(4B) | last_rx_dio1_ms(4B)
+        //         | last_instant_rssi_x10(i16)
+        uint8_t buf[55];
         buf[0] = (uint8_t)compatResetReason();
         uint32_t up_ms     = millis();
         uint32_t freeHeap  = compatFreeHeap();
@@ -959,6 +1001,19 @@ void processHostCommand(uint8_t cmd, const uint8_t* payload, uint16_t len,
         memcpy(&buf[5],  &freeHeap, 4);
         memcpy(&buf[9],  &minHeap,  4);
         memcpy(&buf[13], &maxLoopUs, 4);
+        memcpy(&buf[17], &lastRadioError, 2);
+        buf[19] = radioReady ? 1 : 0;
+        buf[20] = rxModeActive ? 1 : 0;
+        uint32_t irqCount = dio1IrqCount;
+        memcpy(&buf[21], &irqCount, 4);
+        memcpy(&buf[25], &rxDio1Count, 4);
+        memcpy(&buf[29], &rxReadFailCount, 4);
+        memcpy(&buf[33], &rxInvalidLenCount, 4);
+        memcpy(&buf[37], &rxStartCount, 4);
+        memcpy(&buf[41], &rxStartFailCount, 4);
+        memcpy(&buf[45], &lastRxStartMs, 4);
+        memcpy(&buf[49], &lastRxDio1Ms, 4);
+        memcpy(&buf[53], &lastInstantRssiX10, 2);
         sendFrame(CMD_DEBUG_RESP, buf, sizeof(buf), src);
         break;
     }
@@ -1236,8 +1291,14 @@ void setup() {
             SPI.begin();
 #endif
         }
+        Serial.printf("[BOOT] SX1262 SPI init: nss=%d sck=%d miso=%d mosi=%d rst=%d busy=%d dio1=%d\n",
+                      BOARD.pin_lora_nss, BOARD.pin_lora_sck, BOARD.pin_lora_miso,
+                      BOARD.pin_lora_mosi, BOARD.pin_lora_rst, BOARD.pin_lora_busy,
+                      BOARD.pin_lora_dio1);
 
         int state = radio.begin();
+        lastRadioError = state;
+        Serial.printf("[BOOT] SX1262 radio.begin state=%d\n", state);
         if (state != RADIOLIB_ERR_NONE) {
             oled.showError("SX1262 init fail!");
             while (Serial.availableForWrite() == 0) delay(10);
@@ -1248,21 +1309,40 @@ void setup() {
             while (true) delay(1000);
         }
 
-        if (BOARD.use_dio3_tcxo) radio.setTCXO(BOARD.tcxo_voltage);
+        if (BOARD.use_dio3_tcxo) {
+            state = radio.setTCXO(BOARD.tcxo_voltage);
+            lastRadioError = state;
+            Serial.printf("[BOOT] SX1262 setTCXO %.1fV state=%d\n",
+                          BOARD.tcxo_voltage, state);
+            if (state != RADIOLIB_ERR_NONE) {
+                oled.showError("TCXO fail!");
+                sendError(ERR_RADIO_INIT, TransportSource::USB);
+                while (true) delay(1000);
+            }
+        }
         rfSwitchConfigureRadio();
 
         if (!applyConfig(currentConfig)) {
             oled.showError("Config fail!");
+            Serial.printf("[BOOT] SX1262 applyConfig failed state=%d\n", lastRadioError);
             sendError(ERR_INVALID_CONFIG, TransportSource::USB);
             while (true) delay(1000);
         }
+        Serial.printf("[BOOT] SX1262 config ok: freq=%lu bw=%lu sf=%u cr=%u power=%d sync=0x%04X pre=%u\n",
+                      (unsigned long)currentConfig.freq_hz,
+                      (unsigned long)currentConfig.bandwidth_hz,
+                      currentConfig.sf, currentConfig.cr, currentConfig.power_dbm,
+                      currentConfig.syncword, currentConfig.preamble_len);
 
         radio.setDio1Action(onDio1Rise);
 
         if (!startReceive()) {
             oled.showError("RX start fail!");
+            Serial.printf("[BOOT] SX1262 startReceive failed state=%d\n", lastRadioError);
+            sendError(ERR_RADIO_INIT, TransportSource::USB);
             while (true) delay(1000);
         }
+        Serial.println("[BOOT] SX1262 RX mode entered");
 
         radioReady = true;
     } else {
@@ -1375,6 +1455,7 @@ void sampleNoiseFloor() {
 
     if (noiseFloorCount < NUM_NOISE_FLOOR_SAMPLES) {
         float instRssi = radio.getRSSI();
+        lastInstantRssiX10 = (int16_t)(instRssi * 10.0f);
         if (instRssi < (noiseFloor + NOISE_SAMPLING_THRESHOLD)) {
             noiseFloorCount++;
             noiseFloorSum += instRssi;
@@ -1406,6 +1487,8 @@ void loop() {
     // loop() we only act on it when the radio is in RX mode.
     if (dio1Flag && !isTxActive) {
         dio1Flag = false;
+        rxDio1Count++;
+        lastRxDio1Ms = millis();
         handleLoRaRx();
     }
 

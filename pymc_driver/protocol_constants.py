@@ -39,6 +39,7 @@ CMD_AUTH = 0x50
 CMD_WIFI_RESET = 0x60
 CMD_GET_WIFI = 0x61  # v0.5
 CMD_GET_VERSION = 0x70  # v0.5.3
+CMD_GET_DEBUG = 0x72  # v0.5.11
 CMD_PING = 0xFF
 
 # ─── Modem → Host ────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ CMD_CAD_PARAMS_RESP = 0x35  # v0.5.4
 CMD_AUTH_OK = 0x51
 CMD_WIFI_STATUS = 0x62  # v0.5
 CMD_VERSION_RESP = 0x71  # v0.5.3
+CMD_DEBUG_RESP = 0x73  # v0.5.11
 CMD_ERROR = 0xFE
 CMD_PONG = 0xFF
 
@@ -67,6 +69,11 @@ ERR_INVALID_CONFIG = 0x06
 ERR_CAD_FAILED = 0x07
 ERR_RADIO_INIT = 0x08
 ERR_UNAUTHORIZED = 0x09
+ERR_INVALID_WIFI = 0x0A
+ERR_NO_RADIO = 0x0B
+ERR_OTA_UNSUPPORTED = 0x0C
+ERR_OTA_NO_BUFFER = 0x0D
+ERR_CHANNEL_BUSY = 0x0E
 
 # ─── WIFI_STATUS mode codes ──────────────────────────────────────────
 # Matches firmware main.cpp::buildWifiStatusPayload
@@ -85,6 +92,11 @@ RADIO_CONFIG_SIZE = struct.calcsize(RADIO_CONFIG_FMT)
 #                    | last_rssi | snr×10 | noise×10 | temp_c | radio_state
 STATUS_RESP_FMT = "<IIIIhhhbB"
 STATUS_RESP_SIZE = struct.calcsize(STATUS_RESP_FMT)
+
+# DebugResp (17 B): reset_reason | uptime_ms | free_heap | min_free_heap
+#                   | max_loop_us
+DEBUG_RESP_FMT = "<BIIII"
+DEBUG_RESP_SIZE = struct.calcsize(DEBUG_RESP_FMT)
 
 
 # ─── Framing helpers ─────────────────────────────────────────────────
@@ -130,23 +142,26 @@ __all__ = [
     "CMD_STATUS_REQ", "CMD_NOISE_REQ",
     "CMD_CAD_REQUEST", "CMD_RX_START", "CMD_SET_CAD_PARAMS",
     "CMD_SET_WIFI", "CMD_AUTH", "CMD_WIFI_RESET",
-    "CMD_GET_WIFI", "CMD_GET_VERSION", "CMD_PING",
+    "CMD_GET_WIFI", "CMD_GET_VERSION", "CMD_GET_DEBUG", "CMD_PING",
     # Modem → Host
     "CMD_TX_DONE", "CMD_TX_FAIL", "CMD_RX_PACKET",
     "CMD_CONFIG_RESP", "CMD_STATUS_RESP", "CMD_NOISE_RESP",
     "CMD_CAD_RESP", "CMD_RX_STARTED", "CMD_CAD_PARAMS_RESP",
-    "CMD_AUTH_OK", "CMD_WIFI_STATUS", "CMD_VERSION_RESP",
+    "CMD_AUTH_OK", "CMD_WIFI_STATUS", "CMD_VERSION_RESP", "CMD_DEBUG_RESP",
     "CMD_ERROR", "CMD_PONG",
     # Errors
     "ERR_CRC_MISMATCH", "ERR_INVALID_CMD", "ERR_RADIO_BUSY",
     "ERR_TX_TIMEOUT", "ERR_PAYLOAD_TOO_BIG", "ERR_INVALID_CONFIG",
     "ERR_CAD_FAILED", "ERR_RADIO_INIT", "ERR_UNAUTHORIZED",
+    "ERR_INVALID_WIFI", "ERR_NO_RADIO", "ERR_OTA_UNSUPPORTED",
+    "ERR_OTA_NO_BUFFER", "ERR_CHANNEL_BUSY",
     # WIFI_STATUS modes
     "WIFI_MODE_OFFLINE", "WIFI_MODE_STA_CONNECTING",
     "WIFI_MODE_STA_CONNECTED", "WIFI_MODE_AP_CONFIG",
     # Structs
     "RADIO_CONFIG_FMT", "RADIO_CONFIG_SIZE",
     "STATUS_RESP_FMT", "STATUS_RESP_SIZE",
+    "DEBUG_RESP_FMT", "DEBUG_RESP_SIZE",
     # Framing
     "crc16_ccitt", "build_frame",
 ]
