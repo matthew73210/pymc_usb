@@ -229,10 +229,12 @@ extern const BoardConfig BOARD;
 #  include "boards/heltec_tracker_v2.h"
 #elif defined(BOARD_XIAO_WIO_SX1262)
 #  include "boards/xiao_wio_sx1262.h"
+#elif defined(BOARD_PHOTON_1W_XIAO_ESP32C6)
+#  include "boards/photon_1w_xiao_esp32c6.h"
 #elif defined(BOARD_XIAO_NRF52_WIO)
 #  include "boards/xiao_nrf52_wio.h"
 #elif defined(BOARD_STATION_G2)
 #  include "boards/station_g2.h"
 #else
-#  error "No board selected — add one of -DBOARD_HELTEC_V3 / -DBOARD_HELTEC_V4 / -DBOARD_IKOKA_STICK / -DBOARD_LILYGO_T3S3 / -DBOARD_RAK3112_WISMESH / -DBOARD_ESP32_P4_NANO / -DBOARD_HELTEC_T114 / -DBOARD_HELTEC_TRACKER_V2 / -DBOARD_XIAO_WIO_SX1262 / -DBOARD_XIAO_NRF52_WIO / -DBOARD_STATION_G2 to platformio.ini build_flags"
+#  error "No board selected — add one of -DBOARD_HELTEC_V3 / -DBOARD_HELTEC_V4 / -DBOARD_IKOKA_STICK / -DBOARD_LILYGO_T3S3 / -DBOARD_RAK3112_WISMESH / -DBOARD_ESP32_P4_NANO / -DBOARD_HELTEC_T114 / -DBOARD_HELTEC_TRACKER_V2 / -DBOARD_XIAO_WIO_SX1262 / -DBOARD_PHOTON_1W_XIAO_ESP32C6 / -DBOARD_XIAO_NRF52_WIO / -DBOARD_STATION_G2 to platformio.ini build_flags"
 #endif
