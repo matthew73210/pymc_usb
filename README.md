@@ -78,9 +78,10 @@ The `Build Firmware Assets` GitHub workflow uses
 `firmware/tools/build_firmware_assets.py` to build PlatformIO envs and stage
 flasher-ready outputs in `firmware/<env>/`.  Pull requests do not build
 firmware.  Pushes to `main` build affected envs and commit updated
-`firmware/<env>/` binaries, manifests, and SHA256 sums back to `main`.
-Manual dispatch can build `auto`, `all`, or specific envs from any branch;
-manual runs only commit generated files when `commit_artifacts=true`.
+`firmware/<env>/` binaries, manifests, and SHA256 sums back to `main` without
+uploading Actions artifacts.  Manual dispatch can build `auto`, `all`, or
+specific envs from any branch; manual runs upload Actions artifacts for review
+and only commit generated files when `commit_artifacts=true`.
 
 ## Per-board pin map
 

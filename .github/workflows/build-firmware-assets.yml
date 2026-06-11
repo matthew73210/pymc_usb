@@ -96,10 +96,10 @@ jobs:
           echo "envs_json=$envs_json" >> "$GITHUB_OUTPUT"
           echo "Selected envs: $envs_json"
 
-  build:
+  build-manual-artifacts:
     name: Build ${{ matrix.env }}
     needs: select
-    if: needs.select.outputs.has_envs == 'true'
+    if: github.event_name == 'workflow_dispatch' && needs.select.outputs.has_envs == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -149,7 +149,7 @@ jobs:
         run: |
           set -euo pipefail
           clean_flag=''
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.clean }}" = "true" ]; then
+          if [ "${{ inputs.clean }}" = "true" ]; then
             clean_flag='--clean'
           fi
           python3 firmware/tools/build_firmware_assets.py \
@@ -165,17 +165,12 @@ jobs:
             firmware/${{ matrix.env }}/**
           if-no-files-found: error
 
-  commit-artifacts:
-    name: Commit generated firmware assets
+  commit-manual-artifacts:
+    name: Commit manual firmware assets
     needs:
       - select
-      - build
-    if: >
-      needs.select.outputs.has_envs == 'true' &&
-      (
-        (github.event_name == 'workflow_dispatch' && inputs.commit_artifacts == true) ||
-        (github.event_name == 'push' && github.ref_name == 'main')
-      )
+      - build-manual-artifacts
+    if: github.event_name == 'workflow_dispatch' && inputs.commit_artifacts == true && needs.select.outputs.has_envs == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -209,6 +204,89 @@ jobs:
           PY
 
       - name: Commit firmware assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          while read -r env; do
+            [ -n "$env" ] || continue
+            git add "firmware/$env"
+          done < <(python3 - <<'PY'
+          import json
+          for env in json.loads('${{ needs.select.outputs.envs_json }}'):
+              print(env)
+          PY
+          )
+
+          if git diff --cached --quiet; then
+            echo 'No firmware artifact changes to commit.'
+            exit 0
+          fi
+
+          git commit -m 'firmware: update generated firmware assets [skip ci]'
+          git push
+
+  build-and-commit-main:
+    name: Build and commit main firmware assets
+    needs: select
+    if: github.event_name == 'push' && github.ref_name == 'main' && needs.select.outputs.has_envs == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Restore PlatformIO cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.platformio
+            .venv-pio
+          key: ${{ runner.os }}-platformio-main-${{ hashFiles('firmware/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-platformio-main-
+            ${{ runner.os }}-platformio-
+
+      - name: Ensure PlatformIO is available
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v pio >/dev/null 2>&1; then
+            echo "PIO=$(command -v pio)" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          if [ ! -x "$GITHUB_WORKSPACE/.venv-pio/bin/pio" ]; then
+            python -m venv "$GITHUB_WORKSPACE/.venv-pio"
+            "$GITHUB_WORKSPACE/.venv-pio/bin/python" -m pip install --upgrade pip
+            "$GITHUB_WORKSPACE/.venv-pio/bin/python" -m pip install platformio
+          fi
+          echo "PIO=$GITHUB_WORKSPACE/.venv-pio/bin/pio" >> "$GITHUB_ENV"
+
+      - name: Build selected firmware assets without artifact upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          variants=$(python3 - <<'PY'
+          import json
+          print(','.join(json.loads('${{ needs.select.outputs.envs_json }}')))
+          PY
+          )
+          python3 firmware/tools/build_firmware_assets.py \
+            --variant "$variants" \
+            --pio "$PIO"
+
+      - name: Commit firmware assets to main
         shell: bash
         run: |
           set -euo pipefail
