@@ -72,6 +72,16 @@ Native install, Docker deployment, firmware flashing (esptool / PlatformIO /
 OTA), Wi-Fi provisioning and the full pymc_core integration steps are
 documented in [INSTALL.md](INSTALL.md).
 
+## Firmware asset builds
+
+The `Build Firmware Assets` GitHub workflow uses
+`firmware/tools/build_firmware_assets.py` to build PlatformIO envs and stage
+flasher-ready outputs in `firmware/<env>/`.  On PR/push it builds affected
+envs for validation and uploads artifacts.  On manual dispatch it can build
+`auto`, `all`, or specific envs and, when `commit_artifacts=true`, commit the
+updated `firmware/<env>/` binaries, manifests, and SHA256 sums back to the
+branch.
+
 ## Per-board pin map
 
 All board-specific GPIOs and policies live in
