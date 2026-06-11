@@ -1,10 +1,6 @@
 name: Build Firmware Assets
 
 on:
-  pull_request:
-    paths:
-      - '.github/workflows/build-firmware-assets.yml'
-      - 'firmware/**'
   push:
     branches:
       - main
@@ -77,11 +73,6 @@ jobs:
 
           before='${{ github.event.before }}'
           after='${{ github.sha }}'
-
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            before='${{ github.event.pull_request.base.sha }}'
-            after='${{ github.event.pull_request.head.sha }}'
-          fi
 
           python3 firmware/tools/build_firmware_assets.py \
             --variant '${{ steps.inputs.outputs.variant }}' \
@@ -179,7 +170,12 @@ jobs:
     needs:
       - select
       - build
-    if: github.event_name == 'workflow_dispatch' && inputs.commit_artifacts == true && needs.select.outputs.has_envs == 'true'
+    if: >
+      needs.select.outputs.has_envs == 'true' &&
+      (
+        (github.event_name == 'workflow_dispatch' && inputs.commit_artifacts == true) ||
+        (github.event_name == 'push' && github.ref_name == 'main')
+      )
     runs-on: ubuntu-latest
 
     steps:

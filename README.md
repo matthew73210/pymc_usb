@@ -76,11 +76,11 @@ documented in [INSTALL.md](INSTALL.md).
 
 The `Build Firmware Assets` GitHub workflow uses
 `firmware/tools/build_firmware_assets.py` to build PlatformIO envs and stage
-flasher-ready outputs in `firmware/<env>/`.  On PR/push it builds affected
-envs for validation and uploads artifacts.  On manual dispatch it can build
-`auto`, `all`, or specific envs and, when `commit_artifacts=true`, commit the
-updated `firmware/<env>/` binaries, manifests, and SHA256 sums back to the
-branch.
+flasher-ready outputs in `firmware/<env>/`.  Pull requests do not build
+firmware.  Pushes to `main` build affected envs and commit updated
+`firmware/<env>/` binaries, manifests, and SHA256 sums back to `main`.
+Manual dispatch can build `auto`, `all`, or specific envs from any branch;
+manual runs only commit generated files when `commit_artifacts=true`.
 
 ## Per-board pin map
 
