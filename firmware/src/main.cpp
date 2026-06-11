@@ -309,6 +309,20 @@ static void rfSwitchEnHighAfterSettle() {
     delay(20);   // small post-rise settle before we hit the SPI bus
 }
 
+static void configureStaticGpios() {
+    if (!BOARD.has_lora_radio) return;
+    uint8_t count = BOARD.static_gpio_count;
+    if (count > (sizeof(BOARD.static_gpios) / sizeof(BOARD.static_gpios[0]))) {
+        count = sizeof(BOARD.static_gpios) / sizeof(BOARD.static_gpios[0]);
+    }
+    for (uint8_t i = 0; i < count; ++i) {
+        const auto& gpio = BOARD.static_gpios[i];
+        if (gpio.pin < 0) continue;
+        pinMode(gpio.pin, OUTPUT);
+        digitalWrite(gpio.pin, gpio.level_high ? HIGH : LOW);
+    }
+}
+
 static void rfSwitchConfigureRadio() {
     // DIO2 + explicit RX/TX pins are independent — the Wio-SX1262 board uses
     // both: DIO2 drives the TX path internally while RXEN (an external GPIO)
@@ -1209,6 +1223,10 @@ void setup() {
     // this point the RF switch is enabled; SX1262's DIO2 (or our
     // rx_pin / tx_pin GPIOs) will drive the actual TX/RX selection.
     rfSwitchEnHighAfterSettle();
+
+    // Some boards also have PA/LNA front-end mode pins that must be
+    // asserted to fixed levels before the SX1262 is initialized.
+    configureStaticGpios();
 
     // ─── SX1262 init (skipped when board has no LoRa hardware) ──
     // ESP32-P4-NANO ships without a LoRa front end on day one — the

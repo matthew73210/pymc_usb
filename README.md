@@ -93,6 +93,7 @@ Per-board highlights (full pin numbers in the headers, mDNS prefix is
 `BoardConfig.mdns_prefix`, hostname `<prefix>-<mac3>.local`):
 
 - **Heltec V3** — onboard SSD1306, bare SX1262, max 22 dBm.
+- **Heltec V4** — onboard SSD1306, SX1262 + V4.x PA/LNA front-end, native USB-CDC, max 22 dBm SX1262 command power.
 - **Ikoka Stick** — XIAO ESP32-S3 + E22-P868M30S, EN-held + DIO2-as-RF-switch, max 30 dBm chip / +10 dB PA, external OLED.
 - **XIAO Wio-SX1262** — Seeed XIAO ESP32-S3 + bare SX1262, no OLED.
 - **LilyGO T3-S3** — bare SX1262 + onboard SSD1306, native USB-CDC.
