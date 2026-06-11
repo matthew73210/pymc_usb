@@ -4,7 +4,7 @@
 //
 // Supported boards (selected at compile time via -DBOARD_<name>):
 //   * Heltec WiFi LoRa 32 V3 (ESP32-S3 + bare SX1262)
-//   * Ikoka Stick (XIAO ESP32-S3 + Ebyte E22-P868M30S)
+//   * Ikoka Stick (XIAO ESP32-S3 + Ebyte E22P868M30S)
 //
 // USB-CDC @ 921600 baud AND/OR TCP on the port configured via NVS.
 // OTA (ArduinoOTA + HTTP) is always-on whenever STA is connected.
@@ -157,7 +157,7 @@ public:
     }
 };
 
-// SX1262 / E22-P pin map comes from BOARD (see boards/<name>.h).
+// SX1262 / E22P pin map comes from BOARD (see boards/<name>.h).
 PymcSX1262 radio = new Module(BOARD.pin_lora_nss, BOARD.pin_lora_dio1,
                               BOARD.pin_lora_rst, BOARD.pin_lora_busy);
 
@@ -314,7 +314,7 @@ void onDio1Rise() {
 }
 
 // ─── E22 RF switch boot sequence ────────────────────────────
-// Some carrier boards (Ebyte E22-P series, see datasheet §4.2) need
+// Some carrier boards (Ebyte E22P series, see datasheet §4.2) need
 // their EN pin held LOW for several seconds at power-up so the LDOs
 // and PA bias can settle before RF traffic starts. After the hold,
 // EN goes HIGH and stays there forever — never toggled by the radio
@@ -636,7 +636,7 @@ bool applyConfig(const RadioConfig& cfg) {
     state = radio.setCodingRate(cfg.cr);
     if (state != RADIOLIB_ERR_NONE) return false;
 
-    // Hardware ceiling per board (E22-P868M30S = 30 dBm, bare SX1262 = 22).
+    // Hardware ceiling per board (E22P868M30S = 30 dBm, bare SX1262 = 22).
     int8_t pwr = cfg.power_dbm;
     if (pwr > BOARD.max_tx_power_dbm) pwr = BOARD.max_tx_power_dbm;
     state = radio.setOutputPower(pwr);

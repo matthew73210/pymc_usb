@@ -10,7 +10,7 @@ your board:
 | Board | PlatformIO env | mDNS name | Network |
 |---|---|---|---|
 | Heltec WiFi LoRa 32 V3 | `heltec_v3` | `heltec-<mac3>.local` | Wi-Fi |
-| Ikoka Stick (XIAO ESP32-S3 + E22-P868M30S) | `ikoka_stick` | `ikoka-<mac3>.local` | Wi-Fi |
+| Ikoka Stick (XIAO ESP32-S3 + E22P868M30S) | `ikoka_stick` | `ikoka-<mac3>.local` | Wi-Fi |
 | LilyGO T-LoRa T3-S3 v1.2/v1.3 | `lilygo_t3s3` | `lilygo-t3s3-<mac3>.local` | Wi-Fi |
 | RAK3112 WisMesh | `rak3112_wismesh` | `rak3112-<mac3>.local` | Wi-Fi |
 | B&Q Consulting Station G2 | `station_g2` | `station-g2-<mac3>.local` | Wi-Fi |

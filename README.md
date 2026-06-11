@@ -13,8 +13,9 @@ Ethernet) wired LAN.
 | **Heltec WiFi LoRa 32 V3**                                                                                  | ESP32-S3                     | bare SX1262                | Wi-Fi    |
 | **Heltec WiFi LoRa 32 V4**                                                                                  | ESP32-S3                     | SX1262 + PA/LNA FEM        | Wi-Fi    |
 | **Heltec Wireless Tracker V2**                                                                              | ESP32-S3                     | SX1262 + KCT8103L PA/FEM + TFT 160×80 | Wi-Fi |
-| **Ikoka Stick** ([ndoo/ikoka-stick-meshtastic-device](https://github.com/ndoo/ikoka-stick-meshtastic-device))| XIAO ESP32-S3                | Ebyte E22-P868M30S, +30 dBm | Wi-Fi   |
+| **Ikoka Stick** ([ndoo/ikoka-stick-meshtastic-device](https://github.com/ndoo/ikoka-stick-meshtastic-device))| XIAO ESP32-S3                | Ebyte E22P868M30S, +30 dBm | Wi-Fi   |
 | **Seeed XIAO Wio-SX1262**                                                                                   | XIAO ESP32-S3                | bare SX1262                | Wi-Fi    |
+| **MeshSmith Photon-1W ESP32-C6**                                                                            | XIAO ESP32-C6                | SX1262/E22P class 1 W      | Wi-Fi    |
 | **LilyGO T-LoRa T3-S3** v1.2/v1.3                                                                           | ESP32-S3                     | bare SX1262 + OLED         | Wi-Fi    |
 | **RAK3112 WisMesh**                                                                                         | ESP32-S3 (module)            | SX1262 in-module           | Wi-Fi    |
 | **B&Q Consulting Station G2**                                                                                | ESP32-S3                     | SX1262 + 35 dBm PA/LNA     | Wi-Fi    |
@@ -51,7 +52,7 @@ Raspberry Pi                                  pymc_modem modem
 
 ## Project layout
 
-- **`firmware/`** — PlatformIO tree, ten envs sharing one source.
+- **`firmware/`** — PlatformIO tree, twelve envs sharing one source.
   Each board lives in `include/boards/<env>.h`; `platformio.ini` picks
   one via `-DBOARD_<NAME>`. Prebuilt artifacts (ESP32: `bootloader.bin
   / partitions.bin / firmware.bin`; nRF52 T114: `firmware.hex` +
@@ -99,8 +100,9 @@ Per-board highlights (full pin numbers in the headers, mDNS prefix is
 - **Heltec V3** — onboard SSD1306, bare SX1262, max 22 dBm.
 - **Heltec V4** — onboard SSD1306, SX1262 + V4.x PA/LNA front-end, native USB-CDC, max 22 dBm SX1262 command power.
 - **Heltec Wireless Tracker V2** — ESP32-S3 + SX1262 + KCT8103L PA/FEM, ST7735 TFT 160×80, native USB-CDC, max 22 dBm SX1262 command power.
-- **Ikoka Stick** — XIAO ESP32-S3 + E22-P868M30S, EN-held + DIO2-as-RF-switch, max 30 dBm chip / +10 dB PA, external OLED.
+- **Ikoka Stick** — XIAO ESP32-S3 + E22P868M30S, EN-held + DIO2-as-RF-switch, max 30 dBm chip / +10 dB PA, external OLED.
 - **XIAO Wio-SX1262** — Seeed XIAO ESP32-S3 + bare SX1262, no OLED.
+- **MeshSmith Photon-1W ESP32-C6** — Seeed XIAO ESP32-C6 + Photon 1 W SX1262/E22P class front end, Photon XIAO pinout (D1 DIO1, D2 reset, D3 busy, D4 NSS, D5 RXEN, D8/D9/D10 SPI), Wi-Fi/TCP + AP provisioning + web UI/stats/OTA.
 - **LilyGO T3-S3** — bare SX1262 + onboard SSD1306, native USB-CDC.
 - **RAK3112 WisMesh** — SX1262 inside the RAK3112 module, no OLED.
 - **Station G2** — SX1262 + high-power PA/LNA, SH1107 display currently disabled, max SX1262 drive capped at 19 dBm.
@@ -108,7 +110,7 @@ Per-board highlights (full pin numbers in the headers, mDNS prefix is
 - **Heltec T114** — nRF52840 + bare SX1262 + ST7789 TFT 135×240, **no Wi-Fi/TCP/network OTA**; USB-CDC + UART transport only, OTA via Adafruit nRF52 DFU (USB) or in-app `CMD_OTA_*` over the protocol transport.
 - **Seeed XIAO nRF52840 + Wio-SX1262** (SKU 102010710) — XIAO nRF52840 + bare SX1262 on the Wio-SX1262 carrier, BLE 5.0 hardware unused, **no Wi-Fi/TCP/network OTA**, no display; native USB-CDC transport only, OTA via Adafruit nRF52 DFU (UF2 disk on double-click reset) or in-app `CMD_OTA_*`.
 
-### E22-P RF switch (Ikoka, P4-Nano + E22P)
+### E22P RF switch (Ikoka, P4-Nano + E22P)
 
 E22P truth table from the datasheet: `EN=1, T/R CTRL=1` → TX,
 `EN=1, T/R CTRL=0` → RX, `EN=0` → off. Firmware drives `EN` LOW for

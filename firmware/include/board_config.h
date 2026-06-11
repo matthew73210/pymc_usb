@@ -28,7 +28,7 @@
 //                     own RF switch is fully internal).
 //
 //   en_low_hold_ms    Boot-time hold duration for `en_pin` LOW. Ebyte
-//                     E22-P modules need ≥5000 ms for the LDOs and
+//                     E22P modules need ≥5000 ms for the LDOs and
 //                     PA bias to settle before EN goes HIGH; ignored
 //                     when en_pin == -1.
 //
