@@ -56,6 +56,8 @@ inline const BoardConfig BOARD = {
     .pin_user_button        = 9,     // BOOT button on Seeed XIAO ESP32-C6
     .user_button_active_low = true,
 
+    .battery = { .pin = -1 },
+
     .max_tx_power_dbm = 30,          // Photon 1W / E22P class front end
 
     .use_dio3_tcxo = true,

@@ -27,10 +27,10 @@ The `esp32_p4_nano`, `station_g2`, and `photon_1w_xiao_esp32c6` envs use the
 (pinned in `platformio.ini`) for the Arduino-ESP32 3.x / ESP-IDF 5.x
 toolchain; first build will fetch the platform package once.
 
-### 1a. Prebuilt binaries (no PlatformIO)
+### 1a. Prebuilt ESP32-family binaries (no PlatformIO)
 
-`firmware/` ships per-board subdirectories with three flashable
-artefacts each:
+ESP32-family `firmware/<env>/` subdirectories ship three flashable artefacts
+each:
 
 | Path                              | Offset | Size  |
 |-----------------------------------|--------|-------|
