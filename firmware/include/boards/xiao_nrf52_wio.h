@@ -32,58 +32,59 @@
 // rides on D5 (RXEN). Both must be wired in rf_switch{}.
 //
 // Max chip TX power on bare SX1262: 22 dBm. No external PA.
+//
+// Keep this aggregate positional rather than C++ designated-initialized:
+// the nRF52 toolchain uses GCC 7 and does not support non-trivial
+// designated initializers in C++.
 // =============================================================
 #pragma once
 
 inline const BoardConfig BOARD = {
-    .name        = "XIAO nRF52840 + Wio-SX1262",
-    .fw_suffix   = "xiao_nrf52_wio",
-    .mdns_prefix = "xiao-nrf",   // unused — nRF52 has no Wi-Fi/mDNS
+    "XIAO nRF52840 + Wio-SX1262",
+    "xiao_nrf52_wio",
+    "xiao-nrf",   // unused — nRF52 has no Wi-Fi/mDNS
 
     // SX1262 control pins (raw nRF52 GPIO via the identity variant).
-    .pin_lora_nss  = 4,    // D4
-    .pin_lora_rst  = 28,   // D2
-    .pin_lora_busy = 29,   // D3
-    .pin_lora_dio1 = 3,    // D1
+    4,   // pin_lora_nss  = D4
+    28,  // pin_lora_rst  = D2
+    29,  // pin_lora_busy = D3
+    3,   // pin_lora_dio1 = D1
     // SPI line numbers are informational on nRF52 (firmware calls
     // SPI.begin() without arguments — the variant.h PIN_SPI_* macros
     // pick the bus pins) but must be != -1 so main.cpp's SPI-init
     // branch fires.
-    .pin_lora_sck  = 45,   // D8  = P1.13
-    .pin_lora_miso = 46,   // D9  = P1.14
-    .pin_lora_mosi = 47,   // D10 = P1.15
+    45,  // pin_lora_sck  = D8  = P1.13
+    46,  // pin_lora_miso = D9  = P1.14
+    47,  // pin_lora_mosi = D10 = P1.15
 
-    .rf_switch = {
-        .en_pin            = -1,
-        .en_low_hold_ms    = 0,
-        .rx_pin            = 5,    // RXEN — LNA gate on D5 (P0.05)
-        .tx_pin            = -1,   // TX path driven internally via DIO2
-        .dio2_as_rf_switch = true,
-    },
+    {-1, 0, 5, -1, true},  // RXEN on D5/P0.05; TX via DIO2
 
     // No I2C peripheral on this kit. D4/D5 are claimed by NSS/RXEN,
     // so the silkscreen "SDA/SCL" labels are not honoured here.
-    .pin_i2c_sda      = -1,
-    .pin_i2c_scl      = -1,
-    .pin_i2c_oled_rst = -1,
-    .pin_vext_enable_low = -1,
+    -1,  // pin_i2c_sda
+    -1,  // pin_i2c_scl
+    -1,  // pin_i2c_oled_rst
+    -1,  // pin_vext_enable_low
 
-    .pin_user_button         = 18,   // P0.18 (Adafruit BTN0 / DFU)
-    .user_button_active_low  = true,
+    18,    // pin_user_button = P0.18 (Adafruit BTN0 / DFU)
+    true,  // user_button_active_low
 
-    .max_tx_power_dbm = 22,           // bare SX1262 chip ceiling
+    {-1, -1, true, 0.0f},  // no battery sense
 
-    .use_dio3_tcxo = true,
-    .tcxo_voltage  = 1.8f,            // 32 MHz TCXO on Wio-SX1262
+    22,  // max_tx_power_dbm — bare SX1262 chip ceiling
 
-    .has_lora_radio = true,
-    .has_wifi       = false,    // nRF52 has BLE but not Wi-Fi
-    .has_network    = false,    // no WiFi/TCP/OTA stack on this build
+    true,  // use_dio3_tcxo
+    1.8f,  // tcxo_voltage — 32 MHz TCXO on Wio-SX1262
+
+    true,   // has_lora_radio
+    false,  // has_wifi — nRF52 has BLE but not Wi-Fi
+    false,  // has_network — no WiFi/TCP/OTA stack on this build
 
     // No dedicated protocol UART — USB-CDC only.
-    .pin_protocol_uart_rx = -1,
-    .pin_protocol_uart_tx = -1,
-    .protocol_uart_baud   = 921600,
+    -1,      // pin_protocol_uart_rx
+    -1,      // pin_protocol_uart_tx
+    921600,  // protocol_uart_baud
 
-    .ethernet = { .enabled = false },
+    {false, BoardConfig::EthernetPhy::NONE, -1, -1, -1, -1, false, false,
+     {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
 };

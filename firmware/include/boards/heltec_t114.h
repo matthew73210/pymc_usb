@@ -40,55 +40,56 @@
 //   (no external PA on this board variant).
 //
 // TX current at +20 dBm: ~157 mA @ 868 MHz. Sleep: 11 µA.
+//
+// Keep this aggregate positional rather than C++ designated-initialized:
+// the nRF52 toolchain uses GCC 7 and does not support non-trivial
+// designated initializers in C++.
 // =============================================================
 #pragma once
 
 inline const BoardConfig BOARD = {
-    .name        = "Heltec T114",
-    .fw_suffix   = "heltec_t114",
-    .mdns_prefix = "t114",   // unused — nRF52 has no Wi-Fi/mDNS
+    "Heltec T114",
+    "heltec_t114",
+    "t114",   // unused — nRF52 has no Wi-Fi/mDNS
 
     // SX1262 control pins.
-    .pin_lora_nss  = 24,
-    .pin_lora_rst  = 25,
-    .pin_lora_busy = 17,
-    .pin_lora_dio1 = 20,
-    .pin_lora_sck  = 19,
-    .pin_lora_miso = 23,
-    .pin_lora_mosi = 22,
+    24,  // pin_lora_nss
+    25,  // pin_lora_rst
+    17,  // pin_lora_busy
+    20,  // pin_lora_dio1
+    19,  // pin_lora_sck
+    23,  // pin_lora_miso
+    22,  // pin_lora_mosi
 
-    .rf_switch = {
-        .en_pin            = -1,
-        .en_low_hold_ms    = 0,
-        .rx_pin            = -1,
-        .tx_pin            = -1,
-        .dio2_as_rf_switch = true,   // SX1262 internal switch via DIO2
-    },
+    {-1, 0, -1, -1, true},  // SX1262 internal switch via DIO2
 
     // No I2C OLED on this board (TFT-LCD is on a separate SPI bus
     // and isn't wired up in iter 1 firmware).
-    .pin_i2c_sda      = -1,
-    .pin_i2c_scl      = -1,
-    .pin_i2c_oled_rst = -1,
-    .pin_vext_enable_low = -1,
+    -1,  // pin_i2c_sda
+    -1,  // pin_i2c_scl
+    -1,  // pin_i2c_oled_rst
+    -1,  // pin_vext_enable_low
 
-    .pin_user_button         = 42,
-    .user_button_active_low  = true,
+    42,    // pin_user_button
+    true,  // user_button_active_low
 
-    .max_tx_power_dbm = 21,           // datasheet 21 ±1 dBm
+    {-1, -1, true, 0.0f},  // no battery sense
 
-    .use_dio3_tcxo = true,
-    .tcxo_voltage  = 1.8f,
+    21,  // max_tx_power_dbm — datasheet 21 ±1 dBm
 
-    .has_lora_radio = true,
-    .has_wifi       = false,    // nRF52 has BT but not Wi-Fi
-    .has_network    = false,    // gates the entire WiFi+TCP+OTA stack
+    true,  // use_dio3_tcxo
+    1.8f,  // tcxo_voltage
+
+    true,   // has_lora_radio
+    false,  // has_wifi — nRF52 has BT but not Wi-Fi
+    false,  // has_network — gates the entire WiFi+TCP+OTA stack
 
     // Protocol on UART1 by default (sector-array controller wiring).
     // Flip to -1/-1 to talk only over USB-CDC.
-    .pin_protocol_uart_rx = 9,
-    .pin_protocol_uart_tx = 10,
-    .protocol_uart_baud   = 921600,
+    9,       // pin_protocol_uart_rx
+    10,      // pin_protocol_uart_tx
+    921600,  // protocol_uart_baud
 
-    .ethernet = { .enabled = false },
+    {false, BoardConfig::EthernetPhy::NONE, -1, -1, -1, -1, false, false,
+     {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
 };
