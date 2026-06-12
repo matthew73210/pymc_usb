@@ -52,6 +52,18 @@ struct RfSwitchPolicy {
     bool     dio2_as_rf_switch;
 };
 
+struct StaticGpioLevel {
+    int8_t pin;
+    bool   level_high;
+};
+
+struct BatterySenseConfig {
+    int8_t pin;                 // ADC pin, -1 when no battery sense exists
+    int8_t enable_pin;          // optional divider/ADC gate, -1 when always on
+    bool   enable_active_high;
+    float  multiplier;          // raw pin voltage -> pack voltage
+};
+
 // ─── Full per-board config ──────────────────────────────────
 struct BoardConfig {
     const char* name;            // Display name on the OLED splash
@@ -87,6 +99,10 @@ struct BoardConfig {
     // PRG / user button. active_low = pressed pulls LOW.
     int8_t pin_user_button;
     bool   user_button_active_low;
+
+    // Optional LiPo battery monitor. `battery.pin = -1` reports null/unknown.
+    // Voltage is sampled in millivolts and exposed in status/API stats.
+    BatterySenseConfig battery;
 
     // Hardware RF ceiling. Firmware clamps any requested TX power to
     // this value; lets the host config drive everything below.
@@ -164,6 +180,12 @@ struct BoardConfig {
         uint8_t     dns[4];
     };
     EthernetConfig ethernet;
+
+    // Optional board-specific GPIO levels that must be asserted before radio
+    // init and then left alone. Heltec V4 uses these for the PA/LNA front-end
+    // mode pins; older boards leave static_gpio_count at 0.
+    StaticGpioLevel static_gpios[4];
+    uint8_t static_gpio_count;
 };
 
 extern const BoardConfig BOARD;
@@ -171,6 +193,8 @@ extern const BoardConfig BOARD;
 // ─── Board selection ────────────────────────────────────────
 #if defined(BOARD_HELTEC_V3)
 #  include "boards/heltec_v3.h"
+#elif defined(BOARD_HELTEC_V4)
+#  include "boards/heltec_v4.h"
 #elif defined(BOARD_IKOKA_STICK)
 #  include "boards/ikoka_stick.h"
 #elif defined(BOARD_LILYGO_T3S3)
@@ -186,5 +210,5 @@ extern const BoardConfig BOARD;
 #elif defined(BOARD_XIAO_NRF52_WIO)
 #  include "boards/xiao_nrf52_wio.h"
 #else
-#  error "No board selected — add one of -DBOARD_HELTEC_V3 / -DBOARD_IKOKA_STICK / -DBOARD_LILYGO_T3S3 / -DBOARD_RAK3112_WISMESH / -DBOARD_ESP32_P4_NANO / -DBOARD_HELTEC_T114 / -DBOARD_XIAO_WIO_SX1262 / -DBOARD_XIAO_NRF52_WIO to platformio.ini build_flags"
+#  error "No board selected — add one of -DBOARD_HELTEC_V3 / -DBOARD_HELTEC_V4 / -DBOARD_IKOKA_STICK / -DBOARD_LILYGO_T3S3 / -DBOARD_RAK3112_WISMESH / -DBOARD_ESP32_P4_NANO / -DBOARD_HELTEC_T114 / -DBOARD_XIAO_WIO_SX1262 / -DBOARD_XIAO_NRF52_WIO to platformio.ini build_flags"
 #endif

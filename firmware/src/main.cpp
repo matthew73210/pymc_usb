@@ -244,6 +244,30 @@ static uint32_t maxLoopUs = 0;
 static uint32_t lastUsbCmdMs = 0;
 
 #ifdef ARDUINO_ARCH_ESP32
+static uint16_t readBatteryMilliVolts() {
+    if (BOARD.battery.pin < 0 || BOARD.battery.multiplier <= 0.0f) {
+        return 0xFFFF;
+    }
+
+    if (BOARD.battery.enable_pin >= 0) {
+        pinMode(BOARD.battery.enable_pin, OUTPUT);
+        digitalWrite(BOARD.battery.enable_pin,
+                     BOARD.battery.enable_active_high ? HIGH : LOW);
+        delay(5);
+    }
+
+    uint32_t totalMv = 0;
+    constexpr uint8_t samples = 8;
+    for (uint8_t i = 0; i < samples; ++i) {
+        totalMv += analogReadMilliVolts(BOARD.battery.pin);
+        delay(1);
+    }
+    float packMv = (totalMv / (float)samples) * BOARD.battery.multiplier;
+    if (packMv < 0.0f) return 0;
+    if (packMv > 65534.0f) return 65534;
+    return (uint16_t)(packMv + 0.5f);
+}
+
 namespace RuntimeStats {
 Snapshot capture() {
     Snapshot snap = {};
@@ -252,6 +276,7 @@ Snapshot capture() {
     snap.status.radio_state = radioStandby ? 2 : (isTxActive ? 1 : 0);
     snap.status.temp_c = (int8_t)temperatureRead();
     snap.status.noise_floor_x10 = (int16_t)(noiseFloor * 10.0f);
+    snap.status.battery_mv = readBatteryMilliVolts();
     snap.radio = currentConfig;
     snap.firmwareVersion = fwVersion;
     snap.radioStandby = radioStandby;
@@ -307,6 +332,20 @@ static void rfSwitchEnHighAfterSettle() {
     }
     digitalWrite(BOARD.rf_switch.en_pin, HIGH);
     delay(20);   // small post-rise settle before we hit the SPI bus
+}
+
+static void configureStaticGpios() {
+    if (!BOARD.has_lora_radio) return;
+    uint8_t count = BOARD.static_gpio_count;
+    if (count > (sizeof(BOARD.static_gpios) / sizeof(BOARD.static_gpios[0]))) {
+        count = sizeof(BOARD.static_gpios) / sizeof(BOARD.static_gpios[0]);
+    }
+    for (uint8_t i = 0; i < count; ++i) {
+        const auto& gpio = BOARD.static_gpios[i];
+        if (gpio.pin < 0) continue;
+        pinMode(gpio.pin, OUTPUT);
+        digitalWrite(gpio.pin, gpio.level_high ? HIGH : LOW);
+    }
 }
 
 static void rfSwitchConfigureRadio() {
@@ -890,8 +929,10 @@ void processHostCommand(uint8_t cmd, const uint8_t* payload, uint16_t len,
         status.radio_state = isTxActive ? 1 : 0;
 #ifdef ARDUINO_ARCH_ESP32
         status.temp_c = (int8_t)temperatureRead();
+        status.battery_mv = readBatteryMilliVolts();
 #else
         status.temp_c = 0;   // nRF52 has its own temperature sensor — TODO
+        status.battery_mv = 0xFFFF;
 #endif
         status.noise_floor_x10 = (int16_t)(noiseFloor * 10.0f);
         sendFrame(CMD_STATUS_RESP, (uint8_t*)&status, sizeof(StatusResp), src);
@@ -1209,6 +1250,10 @@ void setup() {
     // this point the RF switch is enabled; SX1262's DIO2 (or our
     // rx_pin / tx_pin GPIOs) will drive the actual TX/RX selection.
     rfSwitchEnHighAfterSettle();
+
+    // Some boards also have PA/LNA front-end mode pins that must be
+    // asserted to fixed levels before the SX1262 is initialized.
+    configureStaticGpios();
 
     // ─── SX1262 init (skipped when board has no LoRa hardware) ──
     // ESP32-P4-NANO ships without a LoRa front end on day one — the
@@ -1528,8 +1573,13 @@ void loop() {
                     ssid     = BOARD.has_wifi ? WifiManager::getSSID()    : "---";
                     ip       = BOARD.has_wifi ? WifiManager::getIPString(): "---";
                 }
+                uint16_t batteryMv = 0xFFFF;
+#ifdef ARDUINO_ARCH_ESP32
+                batteryMv = readBatteryMilliVolts();
+                status.battery_mv = batteryMv;
+#endif
                 oled.showStatus(status.rx_count, status.tx_count,
-                                ssid, ip, stateTag, fwVersion.c_str());
+                                ssid, ip, stateTag, fwVersion.c_str(), batteryMv);
             } else if (currentScreen == Screen::RADIO) {
                 oled.showRadioConfig(currentConfig.freq_hz,
                                      currentConfig.bandwidth_hz,
