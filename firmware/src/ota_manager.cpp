@@ -676,7 +676,7 @@ static void handleRoot() {
     if (WifiManager::hasWifiAntennaSwitch()) {
         body += F("<div class='checkline'><input type='checkbox' id='wifi_ant_ext' name='wifi_ant_ext' value='1'");
         if (cfg.wifiExternalAntenna) body += F(" checked");
-        body += F("><label for='wifi_ant_ext'>Use external Wi-Fi antenna <span class='m'>(ESP32-C6: GPIO3 low, GPIO14 high)</span></label></div>");
+        body += F("><label for='wifi_ant_ext'>Use external Wi-Fi antenna</label></div>");
     }
     body += F("<button type='submit'>Save network settings</button></form></div></details>");
 

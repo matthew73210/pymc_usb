@@ -161,8 +161,15 @@ public:
 };
 
 // SX1262 / E22P pin map comes from BOARD (see boards/<name>.h).
+#if defined(BOARD_PHOTON_1W_XIAO_ESP32C6)
+static SPIClass loraSpi(0);
+PymcSX1262 radio = new Module(BOARD.pin_lora_nss, BOARD.pin_lora_dio1,
+                              BOARD.pin_lora_rst, BOARD.pin_lora_busy,
+                              loraSpi);
+#else
 PymcSX1262 radio = new Module(BOARD.pin_lora_nss, BOARD.pin_lora_dio1,
                               BOARD.pin_lora_rst, BOARD.pin_lora_busy);
+#endif
 
 // Single instance regardless of build — on ESP32 this is the real
 // SSD1306 driver from oled_display.cpp; on nRF52 it's a no-op stub
@@ -1336,9 +1343,16 @@ void setup() {
         // transfer fails.
         if (BOARD.pin_lora_sck >= 0 || BOARD.pin_lora_miso >= 0 || BOARD.pin_lora_mosi >= 0) {
 #ifdef ARDUINO_ARCH_ESP32
+#if defined(BOARD_PHOTON_1W_XIAO_ESP32C6)
+            // Seeed XIAO ESP32-C6 Photon variant matches MeshCore's
+            // working C6 port, which uses SPIClass(0) for the LoRa bus.
+            loraSpi.begin(BOARD.pin_lora_sck, BOARD.pin_lora_miso,
+                          BOARD.pin_lora_mosi);
+#else
             // ESP32-S3/P4 GPIO matrix: rebind SPI to specific pins
             SPI.begin(BOARD.pin_lora_sck, BOARD.pin_lora_miso,
                       BOARD.pin_lora_mosi, BOARD.pin_lora_nss);
+#endif
 #else
             // nRF52 BSP: SPI peripheral has fixed pins on its
             // selected instance. The Heltec T114 variant.h ships
