@@ -183,6 +183,12 @@ struct BoardConfig {
     int8_t   pin_protocol_uart_tx;
     uint32_t protocol_uart_baud;
 
+    // Optional on-board GPS receiver. When both pins are >= 0 the firmware
+    // reads NMEA from this UART and exposes parsed data in /api/stats -> gps.
+    int8_t   pin_gps_uart_rx = -1;
+    int8_t   pin_gps_uart_tx = -1;
+    uint32_t gps_uart_baud = 9600;
+
     // ─── On-board Ethernet (RMII PHY) ───────────────────────
     // Set ethernet.enabled = true on boards with an internal EMAC +
     // external PHY (currently only ESP32-P4-Nano with IP101GRI). The

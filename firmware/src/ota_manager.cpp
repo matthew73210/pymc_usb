@@ -5,6 +5,7 @@
 #include "ota_manager.h"
 #include "board_config.h"
 #include "ethernet_manager.h"
+#include "gps_manager.h"
 #include "net_filter.h"
 #include "runtime_stats.h"
 #include "tcp_server.h"
@@ -396,7 +397,17 @@ static String buildStatsJson(const RuntimeStats::Snapshot& snap,
                              const String& clientIP) {
     String body;
     body.reserve(2048);
-    body += F("{\"system\":");
+    body += F("{\"battery_voltage_mv\":");
+    body += snap.status.battery_mv != 0xFFFF ? String(snap.status.battery_mv) : String("null");
+    body += F(",\"battery_voltage_v\":");
+    body += snap.status.battery_mv != 0xFFFF ? String(snap.status.battery_mv / 1000.0f, 3) : String("null");
+    if (snap.hasBatteryChargeRatePctPerHour) {
+        body += F(",\"solar_charge_rate_percent_per_hour\":");
+        body += snap.batteryChargeRatePctPerHourValid
+                    ? String(snap.batteryChargeRatePctPerHour, 3)
+                    : String("null");
+    }
+    body += F(",\"system\":");
     body += buildSystemJson(snap, net, clientIP);
     body += F(",\"radio\":");
     body += buildRadioJson(snap);
@@ -404,6 +415,8 @@ static String buildStatsJson(const RuntimeStats::Snapshot& snap,
     body += buildCountersJson(snap);
     body += F(",\"network\":");
     body += buildNetworkJson(cfg, net);
+    body += F(",\"gps\":");
+    body += GPSManager::buildJson();
     body += F("}");
     return body;
 }
@@ -723,6 +736,7 @@ static void handleStats() {
     const auto& cfg = WifiManager::getConfig();
     RuntimeStats::Snapshot snap = RuntimeStats::capture();
     NetworkSnapshot net = getNetworkSnapshot();
+    GPSManager::Snapshot gps = GPSManager::snapshot();
     String clientIP = TCPServer::getClientIP();
     String body;
     body.reserve(6144);
@@ -762,6 +776,16 @@ static void handleStats() {
                 (snap.batteryChargeRatePctPerHourValid
                     ? String(snap.batteryChargeRatePctPerHour, 3) + " %/hr"
                     : String("unknown")) + "</span></div>";
+    }
+    if (gps.enabled) {
+        body += "<div class='kv'><span class='k'>GPS fix</span><span class='v'>" +
+                String(gps.fixValid ? "valid" : (gps.seen ? "no fix" : "waiting")) +
+                "</span></div>";
+        if (gps.fixValid) {
+            body += "<div class='kv'><span class='k'>GPS location</span><span class='v'>" +
+                    String(gps.latitude, 6) + ", " + String(gps.longitude, 6) +
+                    "</span></div>";
+        }
     }
     body += "</div></div>";
 
@@ -850,6 +874,12 @@ static void handleApiNetwork() {
     if (!checkAuth()) return;
 
     sendJson(200, buildNetworkJson(WifiManager::getConfig(), getNetworkSnapshot()));
+}
+
+static void handleApiGps() {
+    if (!checkAuth()) return;
+
+    sendJson(200, GPSManager::buildJson());
 }
 
 static void handleApiStats() {
@@ -1138,6 +1168,7 @@ void begin(const String& hn, const String& tk) {
     httpServer->on("/api/system", HTTP_GET, handleApiSystem);
     httpServer->on("/api/radio", HTTP_GET, handleApiRadio);
     httpServer->on("/api/network", HTTP_GET, handleApiNetwork);
+    httpServer->on("/api/gps", HTTP_GET, handleApiGps);
     httpServer->on("/api/stats", HTTP_GET, handleApiStats);
     httpServer->on("/api/config", HTTP_GET, handleApiConfigGet);
     httpServer->on("/api/config", HTTP_POST, handleApiConfigPost);

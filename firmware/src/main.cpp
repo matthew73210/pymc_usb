@@ -44,6 +44,7 @@
 #  include "ota_manager.h"
 #  include "ethernet_manager.h"
 #  include "runtime_stats.h"
+#  include "gps_manager.h"
 #else
 // nRF52 (Heltec T114) build: the network / OLED / OTA managers are
 // excluded from the build via platformio.ini's build_src_filter.
@@ -1529,6 +1530,10 @@ void setup() {
     oledWakeUntil = millis() + OLED_WAKE_DURATION_MS;
     lastAutoCycleMs = millis();   // first auto-cycle fires SCREEN_AUTO_CYCLE_MS after splash
 
+#ifdef ARDUINO_ARCH_ESP32
+    GPSManager::begin();
+#endif
+
     // Arm the task watchdog LAST — everything above may legitimately take
     // many seconds (WiFi STA connect up to 30 s). From now on, any loop()
     // iteration that doesn't complete within LOOP_WDT_TIMEOUT_S triggers a
@@ -1615,6 +1620,9 @@ void loop() {
 
     if (tcpStarted) TCPServer::loop();
     if (otaStarted) OTAManager::loop();
+#ifdef ARDUINO_ARCH_ESP32
+    GPSManager::loop();
+#endif
 
     sampleNoiseFloor();
     if (BOARD.has_wifi) WifiManager::loop();

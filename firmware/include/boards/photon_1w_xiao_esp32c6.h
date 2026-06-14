@@ -95,6 +95,12 @@ inline const BoardConfig BOARD = {
     .pin_protocol_uart_tx = -1,
     .protocol_uart_baud   = 921600,
 
+    // Photon-1W GPS follows the original Photon nRF XIAO UART wiring:
+    // GPS TX -> XIAO D7 (MCU RX), GPS RX -> XIAO D6 (MCU TX).
+    .pin_gps_uart_rx = 17,   // D7 / GPIO17: ESP32-C6 RX from GPS TX
+    .pin_gps_uart_tx = 16,   // D6 / GPIO16: ESP32-C6 TX to GPS RX
+    .gps_uart_baud   = 115200,
+
     .ethernet = { .enabled = false },
     .static_gpios = {},
     .static_gpio_count = 0,
