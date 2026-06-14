@@ -274,9 +274,14 @@ static uint32_t lastUsbCmdMs = 0;
 
 #ifdef ARDUINO_ARCH_ESP32
 static bool readFuelGaugeRegister(uint8_t address, uint8_t reg, uint16_t& value) {
+    Wire.setTimeOut(50);
     Wire.beginTransmission(address);
     Wire.write(reg);
-    if (Wire.endTransmission(false) != 0) {
+    // Use a STOP between the register select and read.  The MAX17048 accepts
+    // this, and it avoids the ESP32-C6 Arduino core's repeated-start recovery
+    // path, which can wedge long enough to trip our loop watchdog when the
+    // Photon I2C bus/fuel gauge is absent or not pulled up.
+    if (Wire.endTransmission(true) != 0) {
         return false;
     }
     if (Wire.requestFrom(address, (uint8_t)2) != 2) {
@@ -323,6 +328,25 @@ static uint16_t readBatteryMilliVolts() {
     return (uint16_t)(packMv + 0.5f);
 }
 
+static bool readBatteryChargeRatePctPerHour(float& pctPerHour) {
+    if (BOARD.battery.fuel_gauge_i2c_addr == 0 ||
+        BOARD.battery.fuel_gauge_crate_reg == 0) {
+        return false;
+    }
+
+    uint16_t crate = 0;
+    if (!readFuelGaugeRegister(BOARD.battery.fuel_gauge_i2c_addr,
+                               BOARD.battery.fuel_gauge_crate_reg,
+                               crate)) {
+        return false;
+    }
+
+    // MAX17048 CRATE is signed, 0.208 %/hr per LSB. MeshCore surfaced this
+    // as current; on Photon it is actually the battery charge/discharge rate.
+    pctPerHour = (float)((int16_t)crate) * 0.208f;
+    return true;
+}
+
 namespace RuntimeStats {
 Snapshot capture() {
     Snapshot snap = {};
@@ -336,6 +360,12 @@ Snapshot capture() {
     snap.firmwareVersion = fwVersion;
     snap.radioStandby = radioStandby;
     snap.autoCadEnabled = autoCadEnabled;
+    snap.hasBatteryChargeRatePctPerHour = BOARD.battery.fuel_gauge_i2c_addr != 0 &&
+        BOARD.battery.fuel_gauge_crate_reg != 0;
+    if (snap.hasBatteryChargeRatePctPerHour) {
+        snap.batteryChargeRatePctPerHourValid = readBatteryChargeRatePctPerHour(
+            snap.batteryChargeRatePctPerHour);
+    }
     return snap;
 }
 }

@@ -252,6 +252,12 @@ static String buildSystemJson(const RuntimeStats::Snapshot& snap,
     body += snap.status.battery_mv != 0xFFFF ? String(snap.status.battery_mv) : String("null");
     body += F(",\"battery_voltage_v\":");
     body += snap.status.battery_mv != 0xFFFF ? String(snap.status.battery_mv / 1000.0f, 3) : String("null");
+    if (snap.hasBatteryChargeRatePctPerHour) {
+        body += F(",\"battery_charge_rate_pct_per_hour\":");
+        body += snap.batteryChargeRatePctPerHourValid
+                    ? String(snap.batteryChargeRatePctPerHour, 3)
+                    : String("null");
+    }
     body += F("}");
     return body;
 }
@@ -751,6 +757,12 @@ static void handleStats() {
         body += "<div class='kv'><span class='k'>Battery</span><span class='v'>" +
                 String(snap.status.battery_mv / 1000.0f, 3) + " V</span></div>";
     }
+    if (snap.hasBatteryChargeRatePctPerHour) {
+        body += "<div class='kv'><span class='k'>Battery charge rate</span><span class='v'>" +
+                (snap.batteryChargeRatePctPerHourValid
+                    ? String(snap.batteryChargeRatePctPerHour, 3) + " %/hr"
+                    : String("unknown")) + "</span></div>";
+    }
     body += "</div></div>";
 
     body += F("<h3>Radio</h3><div class='grid'>");
@@ -806,6 +818,12 @@ static void handleApiTemp() {
     body += snap.status.battery_mv != 0xFFFF ? String(snap.status.battery_mv) : String("null");
     body += F(",\"battery_voltage_v\":");
     body += snap.status.battery_mv != 0xFFFF ? String(snap.status.battery_mv / 1000.0f, 3) : String("null");
+    if (snap.hasBatteryChargeRatePctPerHour) {
+        body += F(",\"battery_charge_rate_pct_per_hour\":");
+        body += snap.batteryChargeRatePctPerHourValid
+                    ? String(snap.batteryChargeRatePctPerHour, 3)
+                    : String("null");
+    }
     body += F(",\"firmware\":\"");
     body += snap.firmwareVersion;
     body += F("\",\"hostname\":\"");

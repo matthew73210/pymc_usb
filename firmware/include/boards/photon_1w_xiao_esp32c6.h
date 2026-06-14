@@ -57,8 +57,10 @@ inline const BoardConfig BOARD = {
     .user_button_active_low = true,
 
     // Original MeshCore Photon firmware reads battery voltage from the
-    // MAX17048 fuel gauge on the Photon I2C bus (D4/D5), address 0x36,
-    // VCELL register 0x02.  No ADC divider is needed on the C6 module.
+    // MAX17048 fuel gauge on the Photon I2C bus (D4/D5), address 0x36.
+    // VCELL (0x02) reports voltage; CRATE (0x16) reports the signed battery
+    // charge/discharge rate in %/hr, useful for seeing solar charge input.
+    // No ADC divider is needed on the C6 module.
     .battery = {
         .pin = -1,
         .enable_pin = -1,
@@ -66,6 +68,7 @@ inline const BoardConfig BOARD = {
         .multiplier = 0.0f,
         .fuel_gauge_i2c_addr = 0x36,
         .fuel_gauge_vcell_reg = 0x02,
+        .fuel_gauge_crate_reg = 0x16,
     },
 
     .max_tx_power_dbm = 30,          // Photon 1W / E22P class front end
