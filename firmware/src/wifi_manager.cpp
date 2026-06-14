@@ -67,6 +67,7 @@ static void loadConfig() {
         cfg.hostname = "";
         cfg.tcpPort = DEFAULT_TCP_PORT;
         cfg.wifiExternalAntenna = false;
+        cfg.gpsEnabled = false;
         effectiveHostname = "";
         return;
     }
@@ -82,6 +83,7 @@ static void loadConfig() {
     cfg.tcpToken    = p.getString("token", "");
     cfg.tcpPort     = p.getUShort("port", DEFAULT_TCP_PORT);
     cfg.wifiExternalAntenna = p.getBool("ant_ext", false);
+    cfg.gpsEnabled  = p.getBool("gps_en", false);
     p.end();
 }
 
@@ -177,6 +179,7 @@ void saveConfig(const Config& newCfg) {
     if (hasWifiAntennaSwitch()) {
         p.putBool("ant_ext", newCfg.wifiExternalAntenna);
     }
+    p.putBool("gps_en", newCfg.gpsEnabled);
     p.end();
     cfg = newCfg;
     cfg.hostname = sanitizeHostname(cfg.hostname);

@@ -40,8 +40,35 @@ static String jsonQuote(const String& value) {
     return String("\"") + jsonEscape(value) + "\"";
 }
 
-static bool hasGpsPins() {
+bool hasGpsPins() {
     return BOARD.pin_gps_uart_rx >= 0 && BOARD.pin_gps_uart_tx >= 0 && BOARD.gps_uart_baud > 0;
+}
+
+static void resetRuntimeFields() {
+    current.seen = false;
+    current.fixValid = false;
+    current.fixQuality = 0;
+    current.satellitesUsed = 0;
+    current.satellitesInViewCount = 0;
+    current.satellitesInViewStored = 0;
+    current.latitude = 0.0f;
+    current.longitude = 0.0f;
+    current.altitudeM = 0.0f;
+    current.hasAltitude = false;
+    current.speedKmh = 0.0f;
+    current.hasSpeed = false;
+    current.courseDegrees = 0.0f;
+    current.hasCourse = false;
+    current.utcTime = String();
+    current.date = String();
+    current.datetimeUtc = String();
+    current.lastSentenceType = String();
+    current.lastUpdateMs = 0;
+    current.validSentenceCount = 0;
+    current.invalidChecksumCount = 0;
+    current.rawByteCount = 0;
+    current.configCommandCount = 0;
+    line = String();
 }
 
 #ifdef ARDUINO_ARCH_ESP32
@@ -256,18 +283,47 @@ static void parseSentence(String sentence) {
     }
 }
 
-void begin() {
+void begin(bool enabled) {
     current = Snapshot{};
-    current.enabled = hasGpsPins();
+    current.available = hasGpsPins();
     line.reserve(128);
 #ifdef ARDUINO_ARCH_ESP32
-    if (!current.enabled) return;
-    gpsSerial.begin(BOARD.gps_uart_baud, SERIAL_8N1, BOARD.pin_gps_uart_rx, BOARD.pin_gps_uart_tx);
-    Serial.printf("[GPS] UART GPS enabled on RX=%d TX=%d baud=%lu\n",
-                  BOARD.pin_gps_uart_rx, BOARD.pin_gps_uart_tx,
-                  (unsigned long)BOARD.gps_uart_baud);
-    scheduleAtgm336hConfig();
+    setEnabled(enabled);
 #else
+    current.enabled = false;
+#endif
+}
+
+void setEnabled(bool enabled) {
+#ifdef ARDUINO_ARCH_ESP32
+    bool available = hasGpsPins();
+    if (!available) {
+        current.available = false;
+        current.enabled = false;
+        return;
+    }
+
+    current.available = true;
+    if (enabled == current.enabled) return;
+
+    if (enabled) {
+        resetRuntimeFields();
+        gpsSerial.begin(BOARD.gps_uart_baud, SERIAL_8N1, BOARD.pin_gps_uart_rx, BOARD.pin_gps_uart_tx);
+        current.enabled = true;
+        Serial.printf("[GPS] UART GPS enabled on RX=%d TX=%d baud=%lu\n",
+                      BOARD.pin_gps_uart_rx, BOARD.pin_gps_uart_tx,
+                      (unsigned long)BOARD.gps_uart_baud);
+        scheduleAtgm336hConfig();
+    } else {
+        gpsSerial.end();
+        current.enabled = false;
+        nextConfigCommand = CONFIG_COMMAND_COUNT;
+        resetRuntimeFields();
+        Serial.println("[GPS] UART GPS disabled");
+    }
+#else
+    (void)enabled;
+    current.available = false;
     current.enabled = false;
 #endif
 }
@@ -303,6 +359,8 @@ String buildJson() {
     body.reserve(2048);
     body += F("{\"enabled\":");
     body += snap.enabled ? F("true") : F("false");
+    body += F(",\"available\":");
+    body += snap.available ? F("true") : F("false");
     body += F(",\"seen\":");
     body += snap.seen ? F("true") : F("false");
     body += F(",\"fix\":{");

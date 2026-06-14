@@ -70,6 +70,7 @@ namespace WifiManager {
         String   tcpToken;
         uint16_t tcpPort = 0;
         bool     wifiExternalAntenna = false;
+        bool     gpsEnabled = false;
     };
     inline void  checkResetButton()  {}
     inline void  begin()             {}
@@ -1531,7 +1532,7 @@ void setup() {
     lastAutoCycleMs = millis();   // first auto-cycle fires SCREEN_AUTO_CYCLE_MS after splash
 
 #ifdef ARDUINO_ARCH_ESP32
-    GPSManager::begin();
+    GPSManager::begin(WifiManager::getConfig().gpsEnabled);
 #endif
 
     // Arm the task watchdog LAST — everything above may legitimately take

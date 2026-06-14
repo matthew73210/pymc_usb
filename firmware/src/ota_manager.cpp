@@ -387,6 +387,10 @@ static String buildConfigJson(const WifiManager::Config& cfg) {
         body += F(",\"wifi_external_antenna\":");
         body += boolJson(cfg.wifiExternalAntenna);
     }
+    body += F(",\"gps_enabled\":");
+    body += boolJson(cfg.gpsEnabled);
+    body += F(",\"gps_available\":");
+    body += boolJson(GPSManager::hasGpsPins());
     body += F("}");
     return body;
 }
@@ -507,6 +511,19 @@ static bool applyConfigPatch(JsonVariantConst root, WifiManager::Config& cfg, St
             return false;
         }
         cfg.wifiExternalAntenna = antennaVal.as<bool>();
+    }
+
+    JsonVariantConst gpsVal = obj["gps_enabled"];
+    if (!gpsVal.isNull()) {
+        if (!GPSManager::hasGpsPins()) {
+            error = "gps_enabled is not supported on this board.";
+            return false;
+        }
+        if (!gpsVal.is<bool>()) {
+            error = "gps_enabled must be true or false.";
+            return false;
+        }
+        cfg.gpsEnabled = gpsVal.as<bool>();
     }
 
     JsonVariantConst networkVal = obj["network"];
@@ -698,6 +715,17 @@ static void handleRoot() {
         body += F("><label for='wifi_ant_ext'>Use external Wi-Fi antenna</label></div>");
     }
     body += F("<button type='submit'>Save network settings</button></form></div></details>");
+
+    if (GPSManager::hasGpsPins()) {
+        body += F("<details open><summary>GPS</summary><div class='inside'>"
+                  "<p>Turn the onboard GPS receiver interface on only when location data is needed. Default is off to save battery.</p>"
+                  "<form method='POST' action='/gps'>"
+                  "<div class='checkline'><input type='checkbox' id='gps_enabled' name='gps_enabled' value='1'");
+        if (cfg.gpsEnabled) body += F(" checked");
+        body += F("><label for='gps_enabled'>Enable GPS</label></div>"
+                  "<button type='submit'>Save GPS setting</button>"
+                  "</form><p class='m'>Applies immediately and persists across reboots.</p></div></details>");
+    }
 
     body += F("<details><summary>pyMC Token</summary><div class='inside'>"
               "<p>This token must match the <code>token</code> value in pyMC so pyMC can connect to the radio.</p>"
@@ -1007,6 +1035,30 @@ static void handleNetworkSave() {
     ESP.restart();
 }
 
+static void handleGpsSave() {
+    if (!checkAuth()) return;
+
+    if (!GPSManager::hasGpsPins()) {
+        httpServer->send(400, "text/plain", "GPS is not supported on this board.\n");
+        return;
+    }
+
+    WifiManager::Config cfg = WifiManager::getConfig();
+    cfg.gpsEnabled = httpServer->hasArg("gps_enabled");
+    WifiManager::saveConfig(cfg);
+    GPSManager::setEnabled(cfg.gpsEnabled);
+
+    Serial.printf("[OTA] GPS %s by %s\n",
+                  cfg.gpsEnabled ? "enabled" : "disabled",
+                  httpServer->client().remoteIP().toString().c_str());
+
+    sendSimplePage(cfg.gpsEnabled ? F("GPS enabled") : F("GPS disabled"),
+                   cfg.gpsEnabled ? F("GPS enabled") : F("GPS disabled"),
+                   cfg.gpsEnabled
+                       ? F("The GPS UART is enabled. Fix data may take a moment to appear.")
+                       : F("The GPS UART is disabled and the setting has been saved."));
+}
+
 static void handleTokenSave() {
     if (!checkAuth()) return;
 
@@ -1175,6 +1227,7 @@ void begin(const String& hn, const String& tk) {
     httpServer->on("/api/reboot", HTTP_POST, handleApiReboot);
     httpServer->on("/hostname", HTTP_POST, handleHostnameSave);
     httpServer->on("/network", HTTP_POST, handleNetworkSave);
+    httpServer->on("/gps",     HTTP_POST, handleGpsSave);
     httpServer->on("/token",  HTTP_POST, handleTokenSave);
     httpServer->on("/auth",   HTTP_POST, handleAuthSave);
     httpServer->on("/reboot", HTTP_POST, handleReboot);

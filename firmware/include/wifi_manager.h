@@ -29,6 +29,7 @@ struct Config {
     String    tcpToken;  // empty = no auth required
     uint16_t  tcpPort;   // default 5055
     bool      wifiExternalAntenna; // C6-only when BOARD enables antenna switch
+    bool      gpsEnabled; // default off; applies to any board with GPS UART pins
 };
 
 // Poll PRG button at boot; if held >= 3s, wipe NVS and reboot. Call from setup().

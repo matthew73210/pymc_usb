@@ -13,6 +13,7 @@ struct SatelliteInView {
 };
 
 struct Snapshot {
+    bool available = false;
     bool enabled = false;
     bool seen = false;
     bool fixValid = false;
@@ -40,7 +41,9 @@ struct Snapshot {
     uint32_t configCommandCount = 0;
 };
 
-void begin();
+bool hasGpsPins();
+void begin(bool enabled);
+void setEnabled(bool enabled);
 void loop();
 Snapshot snapshot();
 String buildJson();
