@@ -110,6 +110,7 @@ inline const BoardConfig BOARD = {
     true,   // gps_enable_active_high
     -1,     // pin_gps_reset
     false,  // gps_reset_active_high
+    true,   // gps_send_casic_config
 
     {false, BoardConfig::EthernetPhy::NONE, -1, -1, -1, -1, false, false,
      {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},

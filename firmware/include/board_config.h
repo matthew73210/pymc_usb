@@ -192,6 +192,7 @@ struct BoardConfig {
     bool     gps_enable_active_high = true;
     int8_t   pin_gps_reset = -1;        // optional GPS reset GPIO
     bool     gps_reset_active_high = false;
+    bool     gps_send_casic_config = true; // false for modules/boards that should be left at defaults
 
     // ─── On-board Ethernet (RMII PHY) ───────────────────────
     // Set ethernet.enabled = true on boards with an internal EMAC +

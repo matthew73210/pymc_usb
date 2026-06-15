@@ -50,7 +50,7 @@ static void releaseGpsReset() {
 static void pulseGpsReset() {
     if (BOARD.pin_gps_reset < 0) return;
     setGpsReset(true);
-    delay(120);
+    delay(10);
     releaseGpsReset();
 }
 #endif
@@ -353,7 +353,11 @@ void setEnabled(bool enabled) {
                       BOARD.pin_gps_uart_rx, BOARD.pin_gps_uart_tx,
                       (unsigned long)BOARD.gps_uart_baud,
                       BOARD.pin_gps_enable, BOARD.pin_gps_reset);
-        scheduleAtgm336hConfig();
+        if (BOARD.gps_send_casic_config) {
+            scheduleAtgm336hConfig();
+        } else {
+            nextConfigCommand = CONFIG_COMMAND_COUNT;
+        }
     } else {
         gpsSerial.end();
         current.enabled = false;

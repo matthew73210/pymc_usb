@@ -68,18 +68,20 @@ inline const BoardConfig BOARD = {
     .pin_protocol_uart_tx = -1,
     .protocol_uart_baud   = 921600,
 
-    // Heltec V4.2 GNSS connector, matching the V4.2 schematic and MeshCore:
-    //   GPIO38 RX_GPS: GPS TX -> ESP32-S3 RX
-    //   GPIO39 TX_GPS: ESP32-S3 TX -> GPS RX
+    // Heltec V4.2 GNSS connector, matching MeshCore's working runtime mapping.
+    // MeshCore defines PIN_GPS_RX=38 and PIN_GPS_TX=39, then calls
+    // Serial1.setPins(PIN_GPS_TX, PIN_GPS_RX), so Arduino's RX argument is
+    // GPIO39 and TX argument is GPIO38.
     //   GPIO34 VGNSS_Ctrl: active-low GNSS power enable
     //   GPIO42 RST_GPS: active-low GNSS reset
-    .pin_gps_uart_rx = 38,
-    .pin_gps_uart_tx = 39,
+    .pin_gps_uart_rx = 39,
+    .pin_gps_uart_tx = 38,
     .gps_uart_baud   = 9600,
     .pin_gps_enable = 34,
     .gps_enable_active_high = false,
     .pin_gps_reset = 42,
     .gps_reset_active_high = false,
+    .gps_send_casic_config = false,
 
     .ethernet = { .enabled = false },
 
