@@ -21,7 +21,7 @@
 //     UART0 is on GPIO37 (TX) / GPIO38 (RX). Native USB-OTG goes
 //     to the USB type-A port (host mode), not used by the firmware.
 //   * No LoRa attached on day one (`has_lora_radio = false`). When
-//     an E22-P868M30S is wired later, flip the flag and uncomment
+//     an E22P868M30S is wired later, flip the flag and uncomment
 //     the pin block below — wiring matches §5.1 of the E22 datasheet.
 //
 // Pin allocation summary:
@@ -44,7 +44,7 @@ inline const BoardConfig BOARD = {
 
     // Future-LoRa pins are listed below for documentation, but
     // .has_lora_radio = false makes main.cpp skip every radio path.
-    // When the E22-P module is wired (per the connection table in
+    // When the E22P module is wired (per the connection table in
     // README/INSTALL), flip has_lora_radio to true and these pins
     // become live.
     .pin_lora_nss  = 45,
@@ -84,12 +84,12 @@ inline const BoardConfig BOARD = {
     .pin_user_button        = -1,
     .user_button_active_low = true,
 
-    .max_tx_power_dbm = 30,         // E22-P868M30S ceiling (when fitted)
+    .max_tx_power_dbm = 30,         // E22P868M30S ceiling (when fitted)
 
     .use_dio3_tcxo = true,
     .tcxo_voltage  = 1.8f,
 
-    .has_lora_radio = true,         // E22-P868M30S wired
+    .has_lora_radio = true,         // E22P868M30S wired
 
     // Both Wi-Fi and Ethernet are *capability* flags. main.cpp does
     // runtime selection in setup(): Ethernet is tried first, and if a

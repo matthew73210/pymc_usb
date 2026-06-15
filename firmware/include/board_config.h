@@ -28,7 +28,7 @@
 //                     own RF switch is fully internal).
 //
 //   en_low_hold_ms    Boot-time hold duration for `en_pin` LOW. Ebyte
-//                     E22-P modules need ≥5000 ms for the LDOs and
+//                     E22P modules need ≥5000 ms for the LDOs and
 //                     PA bias to settle before EN goes HIGH; ignored
 //                     when en_pin == -1.
 //
@@ -62,6 +62,15 @@ struct BatterySenseConfig {
     int8_t enable_pin;          // optional divider/ADC gate, -1 when always on
     bool   enable_active_high;
     float  multiplier;          // raw pin voltage -> pack voltage
+    uint8_t fuel_gauge_i2c_addr = 0;      // MAX17048-style fuel gauge, 0=none
+    uint8_t fuel_gauge_vcell_reg = 0x02;  // VCELL register (78.125 uV/LSB)
+    uint8_t fuel_gauge_crate_reg = 0;     // CRATE register, 0=not exposed
+};
+
+struct WifiAntennaSwitchConfig {
+    bool   enabled = false;      // true only on boards with a Wi-Fi RF switch
+    int8_t gpio3_pin = -1;       // ESP32-C6 Wi-Fi antenna select line 1
+    int8_t gpio14_pin = -1;      // ESP32-C6 Wi-Fi antenna select line 2
 };
 
 // ─── Full per-board config ──────────────────────────────────
@@ -148,6 +157,11 @@ struct BoardConfig {
     // esp_hosted is flashed on the C6.
     bool has_wifi;
 
+    // Optional Wi-Fi antenna switch. The ESP32-C6 Photon board uses two
+    // GPIOs to select the external Wi-Fi antenna path. Other boards leave
+    // this disabled so no extra settings or GPIO writes appear there.
+    WifiAntennaSwitchConfig wifi_antenna_switch;
+
     // Whole-board network capability gate. ESP32-S3 / ESP32-P4 boards
     // ship with the WifiManager + TCPServer + OTAManager + Ethernet
     // stack (most of the firmware). The Heltec T114 is nRF52840 — it
@@ -168,6 +182,12 @@ struct BoardConfig {
     int8_t   pin_protocol_uart_rx;
     int8_t   pin_protocol_uart_tx;
     uint32_t protocol_uart_baud;
+
+    // Optional on-board GPS receiver. When both pins are >= 0 the firmware
+    // reads NMEA from this UART and exposes parsed data in /api/stats -> gps.
+    int8_t   pin_gps_uart_rx = -1;
+    int8_t   pin_gps_uart_tx = -1;
+    uint32_t gps_uart_baud = 9600;
 
     // ─── On-board Ethernet (RMII PHY) ───────────────────────
     // Set ethernet.enabled = true on boards with an internal EMAC +
@@ -229,10 +249,12 @@ extern const BoardConfig BOARD;
 #  include "boards/heltec_tracker_v2.h"
 #elif defined(BOARD_XIAO_WIO_SX1262)
 #  include "boards/xiao_wio_sx1262.h"
+#elif defined(BOARD_PHOTON_1W_XIAO_ESP32C6)
+#  include "boards/photon_1w_xiao_esp32c6.h"
 #elif defined(BOARD_XIAO_NRF52_WIO)
 #  include "boards/xiao_nrf52_wio.h"
 #elif defined(BOARD_STATION_G2)
 #  include "boards/station_g2.h"
 #else
-#  error "No board selected — add one of -DBOARD_HELTEC_V3 / -DBOARD_HELTEC_V4 / -DBOARD_IKOKA_STICK / -DBOARD_LILYGO_T3S3 / -DBOARD_RAK3112_WISMESH / -DBOARD_ESP32_P4_NANO / -DBOARD_HELTEC_T114 / -DBOARD_HELTEC_TRACKER_V2 / -DBOARD_XIAO_WIO_SX1262 / -DBOARD_XIAO_NRF52_WIO / -DBOARD_STATION_G2 to platformio.ini build_flags"
+#  error "No board selected — add one of -DBOARD_HELTEC_V3 / -DBOARD_HELTEC_V4 / -DBOARD_IKOKA_STICK / -DBOARD_LILYGO_T3S3 / -DBOARD_RAK3112_WISMESH / -DBOARD_ESP32_P4_NANO / -DBOARD_HELTEC_T114 / -DBOARD_HELTEC_TRACKER_V2 / -DBOARD_XIAO_WIO_SX1262 / -DBOARD_PHOTON_1W_XIAO_ESP32C6 / -DBOARD_XIAO_NRF52_WIO / -DBOARD_STATION_G2 to platformio.ini build_flags"
 #endif

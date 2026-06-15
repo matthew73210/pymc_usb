@@ -5,6 +5,7 @@
 #include "ota_manager.h"
 #include "board_config.h"
 #include "ethernet_manager.h"
+#include "gps_manager.h"
 #include "net_filter.h"
 #include "runtime_stats.h"
 #include "tcp_server.h"
@@ -98,6 +99,8 @@ static IPAddress parseIPArg(const String& s) {
 struct NetworkSnapshot {
     const char* iface = "Offline";
     bool live = false;
+    bool has_wifi_rssi = false;
+    int32_t wifi_rssi_dbm = 0;
     IPAddress ip;
     IPAddress subnet;
     IPAddress gateway;
@@ -125,6 +128,8 @@ static NetworkSnapshot getNetworkSnapshot() {
         snap.gateway = WiFi.gatewayIP();
         snap.dns1 = WiFi.dnsIP(0);
         snap.dns2 = WiFi.dnsIP(1);
+        snap.has_wifi_rssi = true;
+        snap.wifi_rssi_dbm = WiFi.RSSI();
         return snap;
     }
     if (WifiManager::isAPActive()) {
@@ -248,6 +253,12 @@ static String buildSystemJson(const RuntimeStats::Snapshot& snap,
     body += snap.status.battery_mv != 0xFFFF ? String(snap.status.battery_mv) : String("null");
     body += F(",\"battery_voltage_v\":");
     body += snap.status.battery_mv != 0xFFFF ? String(snap.status.battery_mv / 1000.0f, 3) : String("null");
+    if (snap.hasBatteryChargeRatePctPerHour) {
+        body += F(",\"battery_charge_rate_pct_per_hour\":");
+        body += snap.batteryChargeRatePctPerHourValid
+                    ? String(snap.batteryChargeRatePctPerHour, 3)
+                    : String("null");
+    }
     body += F("}");
     return body;
 }
@@ -326,6 +337,10 @@ static String buildNetworkJson(const WifiManager::Config& cfg,
     body += ipJson(net.dns1);
     body += F(",\"dns2\":");
     body += ipJson(net.dns2);
+    if (net.has_wifi_rssi) {
+        body += F(",\"wifi_rssi_dbm\":");
+        body += String(net.wifi_rssi_dbm);
+    }
     body += F(",\"tcp_port\":");
     body += String(cfg.tcpPort);
     body += F(",\"pymc_token_set\":");
@@ -368,6 +383,14 @@ static String buildConfigJson(const WifiManager::Config& cfg) {
     body += ipJson(cfg.dns1);
     body += F(",\"dns2\":");
     body += ipJson(cfg.dns2);
+    if (WifiManager::hasWifiAntennaSwitch()) {
+        body += F(",\"wifi_external_antenna\":");
+        body += boolJson(cfg.wifiExternalAntenna);
+    }
+    body += F(",\"gps_enabled\":");
+    body += boolJson(cfg.gpsEnabled);
+    body += F(",\"gps_available\":");
+    body += boolJson(GPSManager::hasGpsPins());
     body += F("}");
     return body;
 }
@@ -378,7 +401,17 @@ static String buildStatsJson(const RuntimeStats::Snapshot& snap,
                              const String& clientIP) {
     String body;
     body.reserve(2048);
-    body += F("{\"system\":");
+    body += F("{\"battery_voltage_mv\":");
+    body += snap.status.battery_mv != 0xFFFF ? String(snap.status.battery_mv) : String("null");
+    body += F(",\"battery_voltage_v\":");
+    body += snap.status.battery_mv != 0xFFFF ? String(snap.status.battery_mv / 1000.0f, 3) : String("null");
+    if (snap.hasBatteryChargeRatePctPerHour) {
+        body += F(",\"solar_charge_rate_percent_per_hour\":");
+        body += snap.batteryChargeRatePctPerHourValid
+                    ? String(snap.batteryChargeRatePctPerHour, 3)
+                    : String("null");
+    }
+    body += F(",\"system\":");
     body += buildSystemJson(snap, net, clientIP);
     body += F(",\"radio\":");
     body += buildRadioJson(snap);
@@ -386,6 +419,8 @@ static String buildStatsJson(const RuntimeStats::Snapshot& snap,
     body += buildCountersJson(snap);
     body += F(",\"network\":");
     body += buildNetworkJson(cfg, net);
+    body += F(",\"gps\":");
+    body += GPSManager::buildJson();
     body += F("}");
     return body;
 }
@@ -465,6 +500,32 @@ static bool applyConfigPatch(JsonVariantConst root, WifiManager::Config& cfg, St
         cfg.useStaticIP = staticVal.as<bool>();
     }
 
+    JsonVariantConst antennaVal = obj["wifi_external_antenna"];
+    if (!antennaVal.isNull()) {
+        if (!WifiManager::hasWifiAntennaSwitch()) {
+            error = "wifi_external_antenna is not supported on this board.";
+            return false;
+        }
+        if (!antennaVal.is<bool>()) {
+            error = "wifi_external_antenna must be true or false.";
+            return false;
+        }
+        cfg.wifiExternalAntenna = antennaVal.as<bool>();
+    }
+
+    JsonVariantConst gpsVal = obj["gps_enabled"];
+    if (!gpsVal.isNull()) {
+        if (!GPSManager::hasGpsPins()) {
+            error = "gps_enabled is not supported on this board.";
+            return false;
+        }
+        if (!gpsVal.is<bool>()) {
+            error = "gps_enabled must be true or false.";
+            return false;
+        }
+        cfg.gpsEnabled = gpsVal.as<bool>();
+    }
+
     JsonVariantConst networkVal = obj["network"];
     if (!networkVal.isNull()) {
         if (!networkVal.is<JsonObjectConst>()) {
@@ -487,6 +548,19 @@ static bool applyConfigPatch(JsonVariantConst root, WifiManager::Config& cfg, St
         if (!parseJsonIp(network["gateway"], cfg.gateway, "network.gateway", error)) return false;
         if (!parseJsonIp(network["dns1"], cfg.dns1, "network.dns1", error)) return false;
         if (!parseJsonIp(network["dns2"], cfg.dns2, "network.dns2", error)) return false;
+
+        JsonVariantConst antennaVal = network["wifi_external_antenna"];
+        if (!antennaVal.isNull()) {
+            if (!WifiManager::hasWifiAntennaSwitch()) {
+                error = "network.wifi_external_antenna is not supported on this board.";
+                return false;
+            }
+            if (!antennaVal.is<bool>()) {
+                error = "network.wifi_external_antenna must be true or false.";
+                return false;
+            }
+            cfg.wifiExternalAntenna = antennaVal.as<bool>();
+        }
     }
 
     if (cfg.useStaticIP &&
@@ -634,7 +708,24 @@ static void handleRoot() {
     body += "<div><label>DNS 1</label><input type='text' name='dns1' value='" + dns1Value + "' placeholder='1.1.1.1'></div>";
     body += "<div><label>DNS 2</label><input type='text' name='dns2' value='" + dns2Value + "' placeholder='8.8.8.8'></div>";
     body += "<div><label>Current source</label><div class='chip'>" + String(net.iface) + "</div></div>";
-    body += F("</div><button type='submit'>Save network settings</button></form></div></details>");
+    body += F("</div>");
+    if (WifiManager::hasWifiAntennaSwitch()) {
+        body += F("<div class='checkline'><input type='checkbox' id='wifi_ant_ext' name='wifi_ant_ext' value='1'");
+        if (cfg.wifiExternalAntenna) body += F(" checked");
+        body += F("><label for='wifi_ant_ext'>Use external Wi-Fi antenna</label></div>");
+    }
+    body += F("<button type='submit'>Save network settings</button></form></div></details>");
+
+    if (GPSManager::hasGpsPins()) {
+        body += F("<details open><summary>GPS</summary><div class='inside'>"
+                  "<p>Turn the onboard GPS receiver interface on only when location data is needed. Default is off to save battery.</p>"
+                  "<form method='POST' action='/gps'>"
+                  "<div class='checkline'><input type='checkbox' id='gps_enabled' name='gps_enabled' value='1'");
+        if (cfg.gpsEnabled) body += F(" checked");
+        body += F("><label for='gps_enabled'>Enable GPS</label></div>"
+                  "<button type='submit'>Save GPS setting</button>"
+                  "</form><p class='m'>Applies immediately and persists across reboots.</p></div></details>");
+    }
 
     body += F("<details><summary>pyMC Token</summary><div class='inside'>"
               "<p>This token must match the <code>token</code> value in pyMC so pyMC can connect to the radio.</p>"
@@ -673,6 +764,7 @@ static void handleStats() {
     const auto& cfg = WifiManager::getConfig();
     RuntimeStats::Snapshot snap = RuntimeStats::capture();
     NetworkSnapshot net = getNetworkSnapshot();
+    GPSManager::Snapshot gps = GPSManager::snapshot();
     String clientIP = TCPServer::getClientIP();
     String body;
     body.reserve(6144);
@@ -698,10 +790,30 @@ static void handleStats() {
     body += "<div class='kv'><span class='k'>Current IP</span><span class='v'>" + currentIPString() + "</span></div>";
     body += "<div class='kv'><span class='k'>Connected client</span><span class='v'>" + (clientIP.length() > 0 ? clientIP : String("none")) + "</span></div>";
     body += "<div class='kv'><span class='k'>Interface</span><span class='v'>" + String(net.iface) + "</span></div>";
+    if (net.has_wifi_rssi) {
+        body += "<div class='kv'><span class='k'>Wi-Fi signal</span><span class='v'>" +
+                String(net.wifi_rssi_dbm) + " dBm</span></div>";
+    }
     body += "<div class='kv'><span class='k'>Uptime</span><span class='v'>" + formatUptime(snap.status.uptime_sec) + "</span></div>";
     if (snap.status.battery_mv != 0xFFFF) {
         body += "<div class='kv'><span class='k'>Battery</span><span class='v'>" +
                 String(snap.status.battery_mv / 1000.0f, 3) + " V</span></div>";
+    }
+    if (snap.hasBatteryChargeRatePctPerHour) {
+        body += "<div class='kv'><span class='k'>Battery charge rate</span><span class='v'>" +
+                (snap.batteryChargeRatePctPerHourValid
+                    ? String(snap.batteryChargeRatePctPerHour, 3) + " %/hr"
+                    : String("unknown")) + "</span></div>";
+    }
+    if (gps.enabled) {
+        body += "<div class='kv'><span class='k'>GPS fix</span><span class='v'>" +
+                String(gps.fixValid ? "valid" : (gps.seen ? "no fix" : "waiting")) +
+                "</span></div>";
+        if (gps.fixValid) {
+            body += "<div class='kv'><span class='k'>GPS location</span><span class='v'>" +
+                    String(gps.latitude, 6) + ", " + String(gps.longitude, 6) +
+                    "</span></div>";
+        }
     }
     body += "</div></div>";
 
@@ -730,6 +842,14 @@ static void handleStats() {
     body += F("<h3>Network</h3><div class='grid'>");
     body += "<div class='kv'><span class='k'>Mode</span><span class='v'>" + String(cfg.useStaticIP ? "Static" : "DHCP") + "</span></div>";
     body += "<div class='kv'><span class='k'>Port</span><span class='v'>" + String(cfg.tcpPort) + "</span></div>";
+    if (net.has_wifi_rssi) {
+        body += "<div class='kv'><span class='k'>Wi-Fi RSSI</span><span class='v'>" +
+                String(net.wifi_rssi_dbm) + " dBm</span></div>";
+    }
+    if (WifiManager::hasWifiAntennaSwitch()) {
+        body += "<div class='kv'><span class='k'>Wi-Fi antenna</span><span class='v'>" +
+                String(cfg.wifiExternalAntenna ? "External" : "Internal") + "</span></div>";
+    }
     body += "<div class='kv'><span class='k'>Gateway</span><span class='v'>" + ((uint32_t)net.gateway != 0 ? net.gateway.toString() : String("none")) + "</span></div>";
     body += "<div class='kv'><span class='k'>Subnet</span><span class='v'>" + ((uint32_t)net.subnet != 0 ? net.subnet.toString() : String("none")) + "</span></div>";
     body += "<div class='kv'><span class='k'>DNS 1</span><span class='v'>" + ((uint32_t)net.dns1 != 0 ? net.dns1.toString() : String("none")) + "</span></div>";
@@ -750,6 +870,12 @@ static void handleApiTemp() {
     body += snap.status.battery_mv != 0xFFFF ? String(snap.status.battery_mv) : String("null");
     body += F(",\"battery_voltage_v\":");
     body += snap.status.battery_mv != 0xFFFF ? String(snap.status.battery_mv / 1000.0f, 3) : String("null");
+    if (snap.hasBatteryChargeRatePctPerHour) {
+        body += F(",\"battery_charge_rate_pct_per_hour\":");
+        body += snap.batteryChargeRatePctPerHourValid
+                    ? String(snap.batteryChargeRatePctPerHour, 3)
+                    : String("null");
+    }
     body += F(",\"firmware\":\"");
     body += snap.firmwareVersion;
     body += F("\",\"hostname\":\"");
@@ -776,6 +902,12 @@ static void handleApiNetwork() {
     if (!checkAuth()) return;
 
     sendJson(200, buildNetworkJson(WifiManager::getConfig(), getNetworkSnapshot()));
+}
+
+static void handleApiGps() {
+    if (!checkAuth()) return;
+
+    sendJson(200, GPSManager::buildJson());
 }
 
 static void handleApiStats() {
@@ -874,6 +1006,11 @@ static void handleNetworkSave() {
     cfg.gateway     = parseIPArg(httpServer->arg("gw"));
     cfg.dns1        = parseIPArg(httpServer->arg("dns1"));
     cfg.dns2        = parseIPArg(httpServer->arg("dns2"));
+    if (WifiManager::hasWifiAntennaSwitch()) {
+        cfg.wifiExternalAntenna = httpServer->hasArg("wifi_ant_ext");
+    } else {
+        cfg.wifiExternalAntenna = false;
+    }
 
     if (cfg.useStaticIP) {
         if ((uint32_t)cfg.staticIP == 0 || (uint32_t)cfg.subnet == 0 || (uint32_t)cfg.gateway == 0) {
@@ -896,6 +1033,30 @@ static void handleNetworkSave() {
                        : F("The modem will reboot now and come back using DHCP."));
     delay(500);
     ESP.restart();
+}
+
+static void handleGpsSave() {
+    if (!checkAuth()) return;
+
+    if (!GPSManager::hasGpsPins()) {
+        httpServer->send(400, "text/plain", "GPS is not supported on this board.\n");
+        return;
+    }
+
+    WifiManager::Config cfg = WifiManager::getConfig();
+    cfg.gpsEnabled = httpServer->hasArg("gps_enabled");
+    WifiManager::saveConfig(cfg);
+    GPSManager::setEnabled(cfg.gpsEnabled);
+
+    Serial.printf("[OTA] GPS %s by %s\n",
+                  cfg.gpsEnabled ? "enabled" : "disabled",
+                  httpServer->client().remoteIP().toString().c_str());
+
+    sendSimplePage(cfg.gpsEnabled ? F("GPS enabled") : F("GPS disabled"),
+                   cfg.gpsEnabled ? F("GPS enabled") : F("GPS disabled"),
+                   cfg.gpsEnabled
+                       ? F("The GPS UART is enabled. Fix data may take a moment to appear.")
+                       : F("The GPS UART is disabled and the setting has been saved."));
 }
 
 static void handleTokenSave() {
@@ -1059,12 +1220,14 @@ void begin(const String& hn, const String& tk) {
     httpServer->on("/api/system", HTTP_GET, handleApiSystem);
     httpServer->on("/api/radio", HTTP_GET, handleApiRadio);
     httpServer->on("/api/network", HTTP_GET, handleApiNetwork);
+    httpServer->on("/api/gps", HTTP_GET, handleApiGps);
     httpServer->on("/api/stats", HTTP_GET, handleApiStats);
     httpServer->on("/api/config", HTTP_GET, handleApiConfigGet);
     httpServer->on("/api/config", HTTP_POST, handleApiConfigPost);
     httpServer->on("/api/reboot", HTTP_POST, handleApiReboot);
     httpServer->on("/hostname", HTTP_POST, handleHostnameSave);
     httpServer->on("/network", HTTP_POST, handleNetworkSave);
+    httpServer->on("/gps",     HTTP_POST, handleGpsSave);
     httpServer->on("/token",  HTTP_POST, handleTokenSave);
     httpServer->on("/auth",   HTTP_POST, handleAuthSave);
     httpServer->on("/reboot", HTTP_POST, handleReboot);

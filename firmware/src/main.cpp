@@ -4,7 +4,7 @@
 //
 // Supported boards (selected at compile time via -DBOARD_<name>):
 //   * Heltec WiFi LoRa 32 V3 (ESP32-S3 + bare SX1262)
-//   * Ikoka Stick (XIAO ESP32-S3 + Ebyte E22-P868M30S)
+//   * Ikoka Stick (XIAO ESP32-S3 + Ebyte E22P868M30S)
 //
 // USB-CDC @ 921600 baud AND/OR TCP on the port configured via NVS.
 // OTA (ArduinoOTA + HTTP) is always-on whenever STA is connected.
@@ -30,6 +30,7 @@
 // #ifdef below.
 #ifdef ARDUINO_ARCH_ESP32
 #  include <WiFi.h>
+#  include <Wire.h>
 #  include <esp_task_wdt.h>
 #  include <esp_system.h>
 #  include <esp_mac.h>
@@ -43,6 +44,7 @@
 #  include "ota_manager.h"
 #  include "ethernet_manager.h"
 #  include "runtime_stats.h"
+#  include "gps_manager.h"
 #else
 // nRF52 (Heltec T114) build: the network / OLED / OTA managers are
 // excluded from the build via platformio.ini's build_src_filter.
@@ -67,6 +69,8 @@ namespace WifiManager {
         IPAddress dns2;
         String   tcpToken;
         uint16_t tcpPort = 0;
+        bool     wifiExternalAntenna = false;
+        bool     gpsEnabled = false;
     };
     inline void  checkResetButton()  {}
     inline void  begin()             {}
@@ -74,6 +78,8 @@ namespace WifiManager {
     inline void  loadConfigOnly()    {}
     inline bool  isSTAConnected()    { return false; }
     inline bool  isAPActive()        { return false; }
+    inline bool  hasWifiAntennaSwitch() { return false; }
+    inline void  applyWifiAntennaSwitch() {}
     inline const char* getSSID()     { return "---"; }
     inline const char* getIPString() { return "---"; }
     inline const char* getHostname() { return "---"; }
@@ -157,9 +163,16 @@ public:
     }
 };
 
-// SX1262 / E22-P pin map comes from BOARD (see boards/<name>.h).
+// SX1262 / E22P pin map comes from BOARD (see boards/<name>.h).
+#if defined(BOARD_PHOTON_1W_XIAO_ESP32C6)
+static SPIClass loraSpi(0);
+PymcSX1262 radio = new Module(BOARD.pin_lora_nss, BOARD.pin_lora_dio1,
+                              BOARD.pin_lora_rst, BOARD.pin_lora_busy,
+                              loraSpi);
+#else
 PymcSX1262 radio = new Module(BOARD.pin_lora_nss, BOARD.pin_lora_dio1,
                               BOARD.pin_lora_rst, BOARD.pin_lora_busy);
+#endif
 
 // Single instance regardless of build — on ESP32 this is the real
 // SSD1306 driver from oled_display.cpp; on nRF52 it's a no-op stub
@@ -262,7 +275,38 @@ static uint32_t maxLoopUs = 0;
 static uint32_t lastUsbCmdMs = 0;
 
 #ifdef ARDUINO_ARCH_ESP32
+static bool readFuelGaugeRegister(uint8_t address, uint8_t reg, uint16_t& value) {
+    Wire.setTimeOut(50);
+    Wire.beginTransmission(address);
+    Wire.write(reg);
+    // Use a STOP between the register select and read.  The MAX17048 accepts
+    // this, and it avoids the ESP32-C6 Arduino core's repeated-start recovery
+    // path, which can wedge long enough to trip our loop watchdog when the
+    // Photon I2C bus/fuel gauge is absent or not pulled up.
+    if (Wire.endTransmission(true) != 0) {
+        return false;
+    }
+    if (Wire.requestFrom(address, (uint8_t)2) != 2) {
+        return false;
+    }
+    value = ((uint16_t)Wire.read() << 8) | Wire.read();
+    return true;
+}
+
 static uint16_t readBatteryMilliVolts() {
+    if (BOARD.battery.fuel_gauge_i2c_addr != 0) {
+        uint16_t vcell = 0;
+        if (readFuelGaugeRegister(BOARD.battery.fuel_gauge_i2c_addr,
+                                  BOARD.battery.fuel_gauge_vcell_reg,
+                                  vcell)) {
+            // MAX17048 VCELL uses 78.125 uV/LSB units, same conversion as
+            // the original MeshCore Photon firmware: vcell * 5 / 64 mV.
+            uint32_t mv = ((uint32_t)vcell * 5U) / 64U;
+            return mv > 65534U ? 65534U : (uint16_t)mv;
+        }
+        return 0xFFFF;
+    }
+
     if (BOARD.battery.pin < 0 || BOARD.battery.multiplier <= 0.0f) {
         return 0xFFFF;
     }
@@ -286,6 +330,25 @@ static uint16_t readBatteryMilliVolts() {
     return (uint16_t)(packMv + 0.5f);
 }
 
+static bool readBatteryChargeRatePctPerHour(float& pctPerHour) {
+    if (BOARD.battery.fuel_gauge_i2c_addr == 0 ||
+        BOARD.battery.fuel_gauge_crate_reg == 0) {
+        return false;
+    }
+
+    uint16_t crate = 0;
+    if (!readFuelGaugeRegister(BOARD.battery.fuel_gauge_i2c_addr,
+                               BOARD.battery.fuel_gauge_crate_reg,
+                               crate)) {
+        return false;
+    }
+
+    // MAX17048 CRATE is signed, 0.208 %/hr per LSB. MeshCore surfaced this
+    // as current; on Photon it is actually the battery charge/discharge rate.
+    pctPerHour = (float)((int16_t)crate) * 0.208f;
+    return true;
+}
+
 namespace RuntimeStats {
 Snapshot capture() {
     Snapshot snap = {};
@@ -299,6 +362,12 @@ Snapshot capture() {
     snap.firmwareVersion = fwVersion;
     snap.radioStandby = radioStandby;
     snap.autoCadEnabled = autoCadEnabled;
+    snap.hasBatteryChargeRatePctPerHour = BOARD.battery.fuel_gauge_i2c_addr != 0 &&
+        BOARD.battery.fuel_gauge_crate_reg != 0;
+    if (snap.hasBatteryChargeRatePctPerHour) {
+        snap.batteryChargeRatePctPerHourValid = readBatteryChargeRatePctPerHour(
+            snap.batteryChargeRatePctPerHour);
+    }
     return snap;
 }
 }
@@ -314,7 +383,7 @@ void onDio1Rise() {
 }
 
 // ─── E22 RF switch boot sequence ────────────────────────────
-// Some carrier boards (Ebyte E22-P series, see datasheet §4.2) need
+// Some carrier boards (Ebyte E22P series, see datasheet §4.2) need
 // their EN pin held LOW for several seconds at power-up so the LDOs
 // and PA bias can settle before RF traffic starts. After the hold,
 // EN goes HIGH and stays there forever — never toggled by the radio
@@ -636,7 +705,7 @@ bool applyConfig(const RadioConfig& cfg) {
     state = radio.setCodingRate(cfg.cr);
     if (state != RADIOLIB_ERR_NONE) return false;
 
-    // Hardware ceiling per board (E22-P868M30S = 30 dBm, bare SX1262 = 22).
+    // Hardware ceiling per board (E22P868M30S = 30 dBm, bare SX1262 = 22).
     int8_t pwr = cfg.power_dbm;
     if (pwr > BOARD.max_tx_power_dbm) pwr = BOARD.max_tx_power_dbm;
     state = radio.setOutputPower(pwr);
@@ -724,11 +793,11 @@ void processHostCommand(uint8_t cmd, const uint8_t* payload, uint16_t len,
     // Any successfully-processed host frame counts toward OTA sanity.
     OTAManager::notifyValidFrame();
 
-    // Boards without a LoRa radio (ESP32-P4-Nano on day one) ack the
-    // non-radio commands (PING, GET_VERSION, GET_WIFI, AUTH, …) but
-    // refuse anything that would touch the SX1262. The host can still
+    // Boards without a LoRa radio, or boards where SX1262 init failed,
+    // ack the non-radio commands (PING, GET_VERSION, GET_WIFI, AUTH, …)
+    // but refuse anything that would touch the SX1262. The host can still
     // probe the modem and configure Wi-Fi via the existing flow.
-    if (!BOARD.has_lora_radio) {
+    if (!BOARD.has_lora_radio || !radioReady) {
         switch (cmd) {
         case CMD_TX_REQUEST:  case CMD_SET_CONFIG:  case CMD_GET_CONFIG:
         case CMD_STATUS_REQ:  case CMD_NOISE_REQ:   case CMD_CAD_REQUEST:
@@ -1333,9 +1402,16 @@ void setup() {
         // transfer fails.
         if (BOARD.pin_lora_sck >= 0 || BOARD.pin_lora_miso >= 0 || BOARD.pin_lora_mosi >= 0) {
 #ifdef ARDUINO_ARCH_ESP32
+#if defined(BOARD_PHOTON_1W_XIAO_ESP32C6)
+            // Seeed XIAO ESP32-C6 Photon variant matches MeshCore's
+            // working C6 port, which uses SPIClass(0) for the LoRa bus.
+            loraSpi.begin(BOARD.pin_lora_sck, BOARD.pin_lora_miso,
+                          BOARD.pin_lora_mosi);
+#else
             // ESP32-S3/P4 GPIO matrix: rebind SPI to specific pins
             SPI.begin(BOARD.pin_lora_sck, BOARD.pin_lora_miso,
                       BOARD.pin_lora_mosi, BOARD.pin_lora_nss);
+#endif
 #else
             // nRF52 BSP: SPI peripheral has fixed pins on its
             // selected instance. The Heltec T114 variant.h ships
@@ -1355,12 +1431,9 @@ void setup() {
             oled.showError("SX1262 init fail!");
             while (Serial.availableForWrite() == 0) delay(10);
             sendError(ERR_RADIO_INIT, TransportSource::USB);
-            // Do not enter OTA loop without a working radio — this
-            // firmware would be rolled back automatically by the
-            // bootloader on reset.
-            while (true) delay(1000);
-        }
-
+            Serial.println("[BOOT] SX1262 init failed — continuing with Wi-Fi/config portal only");
+            radioReady = false;
+        } else {
         if (BOARD.use_dio3_tcxo) {
             state = radio.setTCXO(BOARD.tcxo_voltage);
             LOG_R_INFO("setTCXO(%.1f V) -> %d", BOARD.tcxo_voltage, state);
@@ -1383,6 +1456,7 @@ void setup() {
         }
 
         radioReady = true;
+        }
     } else {
         Serial.println("[BOOT] no LoRa radio on this board — running as Wi-Fi/Ethernet bridge only");
         radioReady = false;
@@ -1456,6 +1530,10 @@ void setup() {
     currentScreen = Screen::STATUS;
     oledWakeUntil = millis() + OLED_WAKE_DURATION_MS;
     lastAutoCycleMs = millis();   // first auto-cycle fires SCREEN_AUTO_CYCLE_MS after splash
+
+#ifdef ARDUINO_ARCH_ESP32
+    GPSManager::begin(WifiManager::getConfig().gpsEnabled);
+#endif
 
     // Arm the task watchdog LAST — everything above may legitimately take
     // many seconds (WiFi STA connect up to 30 s). From now on, any loop()
@@ -1543,6 +1621,9 @@ void loop() {
 
     if (tcpStarted) TCPServer::loop();
     if (otaStarted) OTAManager::loop();
+#ifdef ARDUINO_ARCH_ESP32
+    GPSManager::loop();
+#endif
 
     sampleNoiseFloor();
     if (BOARD.has_wifi) WifiManager::loop();

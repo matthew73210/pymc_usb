@@ -3,7 +3,7 @@
   "hardware": {
     "pymc_usb": {
       "name": "pymc_usb (USB-CDC modem)",
-      "description": "ESP32-S3 board running pymc_usb firmware connected by USB cable. Tested boards: Heltec WiFi LoRa 32 V3, Ikoka Stick (XIAO ESP32-S3 + E22-P868M30S).",
+      "description": "ESP32-S3 board running pymc_usb firmware connected by USB cable. Tested boards: Heltec WiFi LoRa 32 V3, Ikoka Stick (XIAO ESP32-S3 + E22P868M30S).",
       "radio_type": "pymc_usb",
       "tx_power": 22,
       "preamble_length": 16

@@ -21,6 +21,8 @@ static WiFiClient  client;
 static String      requiredToken  = "";
 static bool        authenticated  = false;
 static FrameParser parser;
+static uint32_t    acceptedCount  = 0;
+static uint32_t    frameCount     = 0;
 
 static bool requiresAuth() { return requiredToken.length() > 0; }
 
@@ -56,21 +58,33 @@ static void sendErrorToClient(uint8_t err) {
 }
 
 static void disconnectClient() {
-    if (client) client.stop();
+    if (client) {
+        Serial.printf("[TCP] disconnect client %s auth=%u frames=%lu\n",
+                      client.remoteIP().toString().c_str(),
+                      authenticated ? 1U : 0U,
+                      (unsigned long)frameCount);
+        client.stop();
+    }
     authenticated = false;
+    frameCount = 0;
     parser.reset();
 }
 
 static void onFrameOk(uint8_t cmd, const uint8_t* payload, uint16_t len, TransportSource src) {
     (void)src;  // always TCP here
+    frameCount++;
+    Serial.printf("[TCP] frame cmd=0x%02X len=%u auth=%u\n",
+                  cmd, (unsigned)len, authenticated ? 1U : 0U);
 
     if (requiresAuth() && !authenticated) {
         if (cmd == CMD_AUTH) {
             if (len == requiredToken.length() &&
                 memcmp(payload, requiredToken.c_str(), len) == 0) {
                 authenticated = true;
+                Serial.println("[TCP] auth OK");
                 sendToClient(CMD_AUTH_OK, nullptr, 0);
             } else {
+                Serial.println("[TCP] auth rejected");
                 sendErrorToClient(ERR_UNAUTHORIZED);
                 delay(5);
                 disconnectClient();
@@ -95,6 +109,7 @@ static void onFrameOk(uint8_t cmd, const uint8_t* payload, uint16_t len, Transpo
 
 static void onFrameErr(uint8_t err_code, TransportSource src) {
     (void)src;
+    Serial.printf("[TCP] frame parse error 0x%02X\n", err_code);
     noteTransportFrameError(err_code);
     sendErrorToClient(err_code);
 }
@@ -142,6 +157,12 @@ void loop() {
             client.setNoDelay(true);
             parser.reset();
             authenticated = false;
+            frameCount = 0;
+            acceptedCount++;
+            Serial.printf("[TCP] accepted client %s (#%lu, auth=%s)\n",
+                          client.remoteIP().toString().c_str(),
+                          (unsigned long)acceptedCount,
+                          requiresAuth() ? "required" : "open");
         }
     }
 
