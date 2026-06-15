@@ -188,6 +188,10 @@ struct BoardConfig {
     int8_t   pin_gps_uart_rx = -1;
     int8_t   pin_gps_uart_tx = -1;
     uint32_t gps_uart_baud = 9600;
+    int8_t   pin_gps_enable = -1;       // optional GPS/GNSS power-enable GPIO
+    bool     gps_enable_active_high = true;
+    int8_t   pin_gps_reset = -1;        // optional GPS reset GPIO
+    bool     gps_reset_active_high = false;
 
     // ─── On-board Ethernet (RMII PHY) ───────────────────────
     // Set ethernet.enabled = true on boards with an internal EMAC +

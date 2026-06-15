@@ -65,6 +65,20 @@ inline const BoardConfig BOARD = {
     .pin_protocol_uart_rx = -1,
     .pin_protocol_uart_tx = -1,
     .protocol_uart_baud   = 921600,
+
+    // Heltec V4 GNSS connector, matching the V4.2 schematic and MeshCore:
+    //   GPIO38 RX_GPS: GPS TX -> ESP32-S3 RX
+    //   GPIO39 TX_GPS: ESP32-S3 TX -> GPS RX
+    //   GPIO34 VGNSS_Ctrl: active-low GNSS power enable
+    //   GPIO42 RST_GPS: active-low GNSS reset
+    .pin_gps_uart_rx = 38,
+    .pin_gps_uart_tx = 39,
+    .gps_uart_baud   = 9600,
+    .pin_gps_enable = 34,
+    .gps_enable_active_high = false,
+    .pin_gps_reset = 42,
+    .gps_reset_active_high = false,
+
     .ethernet = { .enabled = false },
 
     // Heltec V4.x front-end support:
