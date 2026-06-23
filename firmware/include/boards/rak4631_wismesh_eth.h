@@ -114,9 +114,14 @@ inline const BoardConfig BOARD = {
     -1,      // pin_protocol_uart_tx
     921600,  // protocol_uart_baud
 
-    -1,    // pin_gps_uart_rx
-    -1,    // pin_gps_uart_tx
-    9600,  // gps_uart_baud
+    -1,     // pin_gps_uart_rx
+    -1,     // pin_gps_uart_tx
+    9600,   // gps_uart_baud
+    -1,     // pin_gps_enable
+    true,   // gps_enable_active_high
+    -1,     // pin_gps_reset
+    false,  // gps_reset_active_high
+    true,   // gps_send_casic_config
 
     // `ethernet.enabled` gates network bring-up in main.cpp. The rest of
     // this struct describes RMII PHYs on ESP32-P4 and is not used by W5100S.
