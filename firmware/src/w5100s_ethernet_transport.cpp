@@ -257,6 +257,9 @@ namespace EthernetManager {
         const char* effectiveHostname = (hostname && hostname[0]) ? hostname : PYMC_ETH_HOSTNAME;
         strncpy(hostnameString, effectiveHostname, sizeof(hostnameString));
         hostnameString[sizeof(hostnameString) - 1] = '\0';
+        // Note: the W5100S library does not support DHCP option 12
+        // (hostname), so the hostname is stored only for status
+        // reporting via getIPString() and the WIFI_STATUS path.
 
 #if defined(ARDUINO_ARCH_NRF52) || defined(NRF52_SERIES) || defined(ARDUINO_NRF52_ADAFRUIT)
         PymcEthSpi.begin();
