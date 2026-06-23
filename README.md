@@ -31,18 +31,20 @@ only the SX1262 physical layer: TX, RX, CAD, LoRa parameter configuration.
 ## Architecture
 
 ```
-                          USB-CDC / WiFi-TCP
+                       USB-CDC / Wi-Fi-TCP / Ethernet-TCP
 Raspberry Pi                                  pymc_modem modem
 ┌────────────────────┐                        ┌─────────────────┐
 │ pymc_repeater      │◄ USB 921600 ────────►  │ LoRa Modem FW   │
 │  └─ pymc_core      │                        │  └─ SX1262      │
 │     ├─ USBLoRaRadio│──── OR ──────          │  └─ RadioLib    │
 │     └─ TCPLoRaRadio│◄ TCP 5055 ─────────►   │  └─ OLED / TFT  │
-│                    │                        │  └─ Wi-Fi STA*  │
+│                    │                        │  └─ Wi-Fi / ETH  │
 └────────────────────┘                        └─────────────────┘
-                                              * Wi-Fi on all boards
-                                                except T114 (nRF52,
-                                                USB-CDC + UART only).
+                                              * Wi-Fi on ESP32 boards,
+                                                Ethernet on P4-Nano
+                                                and RAK4631. No network
+                                                on T114/XIAO nRF52 Wio
+                                                (USB-CDC only).
 ```
 
 - **USB mode** — cable, instant, no provisioning; ideal for single-board setups.
@@ -53,7 +55,7 @@ Raspberry Pi                                  pymc_modem modem
 
 ## Project layout
 
-- **`firmware/`** — PlatformIO tree, twelve envs sharing one source.
+- **`firmware/`** — PlatformIO tree, thirteen envs sharing one source.
   Each board lives in `include/boards/<env>.h`; `platformio.ini` picks
   one via `-DBOARD_<NAME>`. Prebuilt artifacts (ESP32: `bootloader.bin
   / partitions.bin / firmware.bin`; nRF52 T114: `firmware.hex` +
@@ -111,7 +113,7 @@ Per-board highlights (full pin numbers in the headers, mDNS prefix is
 - **Station G2** — SX1262 + high-power PA/LNA, SH1107 display currently disabled, max SX1262 drive capped at 19 dBm.
 - **WaveShare ESP32-P4-Nano** — RISC-V P4 + C6 + IP101GRI Ethernet PHY + off-board E22, runtime ETH-or-Wi-Fi (never both, see below).
 - **Heltec T114** — nRF52840 + bare SX1262 + ST7789 TFT 135×240, **no Wi-Fi/TCP/network OTA**; USB-CDC + UART transport only, OTA via Adafruit nRF52 DFU (USB) or in-app `CMD_OTA_*` over the protocol transport.
-- **RAK4631 WisMesh Ethernet** — RAK4631 nRF52840 core module + RAK13800 W5100S Ethernet on the WisBlock IO slot. Separate SPIM instances for Ethernet (SPIM3) and LoRa (SPIM2). No display, no Wi-Fi. The TCP server on port 5055 is the primary transport; USB-CDC is available as a fallback. TCP token, port and hostname are compile-time constants (`PYMC_ETH_*` in `platformio.ini`). The hostname is stored for status reporting only — the W5100S library does not support DHCP option 12, so the DHCP lease does not carry a hostname.
+- **RAK4631 WisMesh Ethernet** — RAK4631 nRF52840 core module + RAK13800 W5100S Ethernet on the WisBlock IO slot. Separate SPIM instances for Ethernet (SPIM3) and LoRa (SPIM2). No display, no Wi-Fi, no network OTA (flash via USB/DFU). The TCP server on port 5055 is the primary transport; USB-CDC is available as a fallback. TCP token, port and hostname are compile-time constants (`PYMC_ETH_*` in `platformio.ini`). The hostname is stored for status reporting only — the W5100S library does not support DHCP option 12. Commands that persist state (standby, auto-CAD, display name) are accepted but volatile — there is no LittleFS/NodeState on this target, so they reset on reboot. Display commands (SET_DISPLAY_NAME) succeed as no-op stubs. The default empty TCP token gives open LAN access; change `PYMC_ETH_TOKEN` to a non-empty string in `platformio.ini` for auth.
 - **Seeed XIAO nRF52840 + Wio-SX1262** (SKU 102010710) — XIAO nRF52840 + bare SX1262 on the Wio-SX1262 carrier, BLE 5.0 hardware unused, **no Wi-Fi/TCP/network OTA**, no display; native USB-CDC transport only, OTA via Adafruit nRF52 DFU (UF2 disk on double-click reset) or in-app `CMD_OTA_*`.
 
 ### E22P RF switch (Ikoka, P4-Nano + E22P)

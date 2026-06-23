@@ -1,15 +1,11 @@
 // =============================================================
 // main.cpp — pymc_modem LoRa Modem firmware
-// Serial + Wi-Fi/TCP bridge to SX1262 for pymc_core on RPi.
+// Serial + Wi-Fi/TCP + Ethernet/TCP bridge to SX1262 for pymc_core.
 //
-// Supported boards (selected at compile time via -DBOARD_<name>):
-//   * Heltec WiFi LoRa 32 V3 (ESP32-S3 + bare SX1262)
-//   * Ikoka Stick (XIAO ESP32-S3 + Ebyte E22P868M30S)
+// Supported boards: see README.md and firmware/include/boards/.
+// Selected at compile time via -DBOARD_<name> in platformio.ini.
 //
-// USB-CDC @ 921600 baud AND/OR TCP on the port configured via NVS.
-// OTA (ArduinoOTA + HTTP) is always-on whenever STA is connected.
-//
-// All MeshCore protocol logic runs on the RPi in pymc_core.
+// All MeshCore protocol logic runs on the host in pymc_core.
 // =============================================================
 
 #include <Arduino.h>

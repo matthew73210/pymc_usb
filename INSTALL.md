@@ -20,6 +20,7 @@ your board:
 | B&Q Consulting Station G2 | `station_g2` | `station-g2-<mac3>.local` | Wi-Fi |
 | WaveShare ESP32-P4-Nano (+ off-board E22) | `esp32_p4_nano` | `p4nano-<mac3>.local` | **Ethernet or Wi-Fi** (runtime auto-select; cable plugged → ETH, no link → WiFi fallback. Both at once is unstable with radio active — see README "Porting to another ESP32-P4 board") |
 | Heltec T114 | `heltec_t114` | n/a | none — USB-CDC + UART only |
+| RAK4631 WisMesh Ethernet Gateway | `rak4631_wismesh_eth` | n/a (hostname is status-only) | **Ethernet** (W5100S, TCP port 5055) — no mDNS, no network OTA |
 | Seeed XIAO nRF52840 + Wio-SX1262 | `xiao_nrf52_wio` | n/a | none — USB-CDC only |
 
 The `esp32_p4_nano`, `station_g2`, and `photon_1w_xiao_esp32c6` envs use the
@@ -91,6 +92,12 @@ release RESET, release BOOT.
 
 ### 1c. OTA over the network (after the first flash, no cable)
 
+**Only ESP32-family boards with Wi-Fi** support network OTA. The
+nRF52 targets (`heltec_t114`, `xiao_nrf52_wio`, `rak4631_wismesh_eth`)
+must be flashed via USB with `pio run -e <env> -t upload` (Adafruit
+nRF52 DFU). The `rak4631_wismesh_eth` target has Ethernet but no
+OTA/HTTP stack — the `OTAManager` stub is a no-op.
+
 Once the board is on the LAN (Wi-Fi STA or Ethernet) and visible via mDNS:
 
 ```bash
@@ -139,7 +146,16 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 (VID/PID `10c4:ea60` matches the CP2102 on the Heltec V3; for native USB-CDC
 use `303a:1001`.)
 
-## 3. WiFi configuration (optional, for `pymc_tcp` mode)
+## 3. WiFi / TCP configuration (optional, for `pymc_tcp` mode)
+
+> **Security note — RAK4631 WisMesh Ethernet:** the default TCP token
+> is empty (`-DPYMC_ETH_TOKEN=\"\"` in `platformio.ini`), making port
+> 5055 open to anyone on the same LAN segment. The firmware does filter
+> non-RFC1918/link-local/loopback source addresses, but on a shared
+> LAN an empty token is only safe on an isolated network. To require
+> authentication, change `PYMC_ETH_TOKEN` to a non-empty string in
+> `platformio.ini` and re-flash. The token is compile-time only on
+> this target — there is no runtime SET_WIFI over USB.
 
 On first boot the Heltec starts an open access point `LoRa-Modem-XXXX`.
 Connect a phone/laptop to that AP, open `http://192.168.4.1`, pick your

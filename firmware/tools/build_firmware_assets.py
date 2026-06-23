@@ -104,6 +104,11 @@ ENV_METADATA: dict[str, dict[str, str | bool]] = {
         "chip_family": "NRF52",
         "web_manifest": False,
     },
+    "rak4631_wismesh_eth": {
+        "name": "RAK4631 WisMesh Ethernet pyMC Modem",
+        "chip_family": "NRF52",
+        "web_manifest": False,
+    },
 }
 
 # Board headers generally map 1:1 to env names in this repo.
@@ -122,6 +127,7 @@ BOARD_HEADER_TO_ENV = {
     "firmware/include/boards/lilygo_t3s3.h": "lilygo_t3s3",
     "firmware/include/boards/heltec_t114.h": "heltec_t114",
     "firmware/include/boards/xiao_nrf52_wio.h": "xiao_nrf52_wio",
+    "firmware/include/boards/rak4631_wismesh_eth.h": "rak4631_wismesh_eth",
 }
 
 # Changes here are shared enough that building all envs is safer.
