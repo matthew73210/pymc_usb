@@ -22,8 +22,6 @@ static const uint8_t WB_IO4 = 4;
 static const uint8_t WB_IO5 = 9;
 static const uint8_t WB_IO6 = 10;
 static const uint8_t WB_SW1 = 33;
-static const uint8_t WB_A0 = 5;
-static const uint8_t WB_A1 = 31;
 static const uint8_t WB_I2C1_SDA = 13;
 static const uint8_t WB_I2C1_SCL = 14;
 static const uint8_t WB_I2C2_SDA = 24;
@@ -63,6 +61,7 @@ static const uint8_t WB_SPI_MOSI = 30;
 #define PIN_SPI_MISO (29)
 #define PIN_SPI_MOSI (30)
 #define PIN_SPI_SCK (3)
+#define PIN_SPI_NSS (26)
 static const uint8_t SS = 26;
 static const uint8_t MOSI = PIN_SPI_MOSI;
 static const uint8_t MISO = PIN_SPI_MISO;

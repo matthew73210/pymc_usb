@@ -656,9 +656,8 @@ static uint16_t buildWifiStatusPayload(uint8_t* out) {
                  : WifiManager::isAPActive()     ? WiFi.softAPIP()
                                                  : IPAddress((uint32_t)0);
     if (ip == IPAddress((uint32_t)0) && ethHasIP) {
-        unsigned a = 0, b = 0, c = 0, d = 0;
-        if (sscanf(EthernetManager::getIPString(), "%u.%u.%u.%u", &a, &b, &c, &d) == 4) {
-            ip = IPAddress((uint8_t)a, (uint8_t)b, (uint8_t)c, (uint8_t)d);
+        if (!ip.fromString(EthernetManager::getIPString())) {
+            ip = IPAddress((uint32_t)0);
         }
     }
     out[i++] = ip[0];  // big-endian dotted quad
