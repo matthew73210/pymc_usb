@@ -11,6 +11,8 @@ your board:
 |---|---|---|---|
 | Heltec WiFi LoRa 32 V3 | `heltec_v3` | `heltec-<mac3>.local` | Wi-Fi |
 | Heltec WiFi LoRa 32 V4 | `heltec_v4` | `heltec-v4-<mac3>.local` | Wi-Fi |
+| Heltec WiFi LoRa 32 V4.2 | `heltec_v42` | `heltec-v42-<mac3>.local` | Wi-Fi |
+| Heltec WiFi LoRa 32 V4.3 | `heltec_v43` | `heltec-v43-<mac3>.local` | Wi-Fi |
 | Heltec Wireless Tracker V2 | `heltec_tracker_v2` | `tracker-v2-<mac3>.local` | Wi-Fi |
 | Ikoka Stick (XIAO ESP32-S3 + E22P868M30S) | `ikoka_stick` | `ikoka-<mac3>.local` | Wi-Fi |
 | Seeed XIAO Wio-SX1262 | `xiao_wio_sx1262` | `xiao-wio-<mac3>.local` | Wi-Fi |
@@ -28,7 +30,7 @@ The `esp32_p4_nano`, `station_g2`, and `photon_1w_xiao_esp32c6` envs use the
 (pinned in `platformio.ini`) for the Arduino-ESP32 3.x / ESP-IDF 5.x
 toolchain; first build will fetch the platform package once.
 
-### 1a. Prebuilt ESP32-family binaries (no PlatformIO)
+### 1a. Prebuilt firmware binaries (no PlatformIO)
 
 ESP32-family `firmware/<env>/` subdirectories ship three flashable artefacts
 each:
@@ -39,16 +41,24 @@ each:
 | `firmware/<env>/partitions.bin`   | `0x8000`  | 3 kB   |
 | `firmware/<env>/firmware.bin`     | `0x10000` | ~830 kB|
 
-`<env>` is one of: `heltec_v3`, `heltec_v4`, `heltec_tracker_v2`,
-`ikoka_stick`, `xiao_wio_sx1262`, `photon_1w_xiao_esp32c6`,
+`<env>` is one of: `heltec_v3`, `heltec_v4`, `heltec_v42`, `heltec_v43`,
+`heltec_tracker_v2`, `ikoka_stick`, `xiao_wio_sx1262`, `photon_1w_xiao_esp32c6`,
 `lilygo_t3s3`, `rak3112_wismesh`, `esp32_p4_nano`, or `station_g2`.
+
+nRF52 targets ship `firmware.hex`, `firmware.zip`, and `SHA256SUMS.txt` in
+`firmware/<env>/` after the firmware asset workflow runs. Use the ZIP with
+Adafruit nRF52 DFU, or double-click reset and use the board bootloader flow;
+there are no ESP32-style bootloader/partition offsets for these targets.
+
+`<env>` for nRF52 is one of: `heltec_t114`, `xiao_nrf52_wio`, or
+`rak4631_wismesh_eth`.
 
 ```bash
 pip install esptool
 
 # Full flash (fresh board, first install) — replace the ENV/CHIP pair
 # with the row that matches your board:
-ENV=heltec_v3      ; CHIP=esp32s3   # also for heltec_v4 / heltec_tracker_v2 / ikoka_stick / xiao_wio_sx1262 / lilygo_t3s3 / rak3112_wismesh / station_g2
+ENV=heltec_v3      ; CHIP=esp32s3   # also for heltec_v4 / heltec_v42 / heltec_v43 / heltec_tracker_v2 / ikoka_stick / xiao_wio_sx1262 / lilygo_t3s3 / rak3112_wismesh / station_g2
 # ENV=photon_1w_xiao_esp32c6 ; CHIP=esp32c6
 # ENV=esp32_p4_nano ; CHIP=esp32p4
 
@@ -109,8 +119,8 @@ curl -u admin:password -F firmware=@.pio/build/<env>/firmware.bin \
      http://<env-stem>-<mac3>.local/update
 ```
 
-Hostname stems are listed in §1 (e.g. `heltec`, `heltec-v4`, `tracker-v2`,
-`ikoka`, `xiao-wio`, `photon-c6`, `lilygo-t3s3`, `rak3112`, `station-g2`,
+Hostname stems are listed in §1 (e.g. `heltec`, `heltec-v4`, `heltec-v42`,
+`heltec-v43`, `tracker-v2`, `ikoka`, `xiao-wio`, `photon-c6`, `lilygo-t3s3`, `rak3112`, `station-g2`,
 `p4nano`). The board reboots after upload.
 The HTTP OTA page uses Basic Auth with username `admin` and default
 password `password`; change it from the OTA page after first network boot.
@@ -149,14 +159,14 @@ use `303a:1001`.)
 
 ## 3. WiFi / TCP configuration (optional, for `pymc_tcp` mode)
 
-> **Security note — RAK4631 WisMesh Ethernet:** the default TCP token
-> is empty (`-DPYMC_ETH_TOKEN=\"\"` in `platformio.ini`), making port
-> 5055 open to anyone on the same LAN segment. The firmware does filter
-> non-RFC1918/link-local/loopback source addresses, but on a shared
-> LAN an empty token is only safe on an isolated network. To require
-> authentication, change `PYMC_ETH_TOKEN` to a non-empty string in
-> `platformio.ini` and re-flash. The token is compile-time only on
-> this target — there is no runtime SET_WIFI over USB.
+> **Security note — network TCP token:** fresh firmware defaults to an empty
+> TCP token, so port 5055 is open to anyone on the same LAN segment until
+> you set one. The firmware still filters non-RFC1918/link-local/loopback
+> source addresses, but on a shared LAN an empty token is only safe on an
+> isolated network. On web-enabled Wi-Fi firmware, set/change the TCP token
+> from the device web UI (or via USB provisioning). The RAK4631 W5100S
+> Ethernet target has no web UI/HTTP stack, so its current token default is
+> the `PYMC_ETH_TOKEN` build flag in `platformio.ini`.
 
 On first boot the Heltec starts an open access point `LoRa-Modem-XXXX`.
 Connect a phone/laptop to that AP, open `http://192.168.4.1`, pick your

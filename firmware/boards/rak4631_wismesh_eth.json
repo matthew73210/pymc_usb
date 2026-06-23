@@ -15,7 +15,7 @@
     ],
     "usb_product": "WisMesh-pyMC-Ethernet",
     "mcu": "nrf52840",
-    "variant": "WisCore_RAK4631_Board",
+    "variant": "RAK4631_WisMesh_Ethernet",
     "bsp": {
       "name": "adafruit"
     },

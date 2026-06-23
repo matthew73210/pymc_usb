@@ -1,5 +1,5 @@
 /*
-  Minimal RAK4631 variant for pyMC_modem.
+  Product-specific pyMC variant for the RAK4631 WisMesh Ethernet Gateway.
   Based on RAKWireless/RAK-nRF52-Arduino variants/WisCore_RAK4631_Board.
 */
 #ifndef _VARIANT_RAK4631_PYMC_
