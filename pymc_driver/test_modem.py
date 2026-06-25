@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-test_modem.py — Validation tool for Heltec LoRa Modem firmware v0.3
+test_modem.py — Validation tool for openHop Modem firmware v0.3
 Run on Mac/RPi to verify serial protocol communication.
 
 Usage:
@@ -254,7 +254,7 @@ def main():
     baud = 921600
 
     print(f"══════════════════════════════════════════")
-    print(f"  Heltec LoRa Modem Test Tool v0.3")
+    print(f"  openHop Modem Test Tool v0.3")
     print(f"  Port: {port}  Baud: {baud}")
     print(f"══════════════════════════════════════════")
 

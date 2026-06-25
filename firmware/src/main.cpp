@@ -1,5 +1,5 @@
 // =============================================================
-// main.cpp — pymc_modem LoRa Modem firmware
+// main.cpp — openHop Modem (pymc_modem) firmware
 // Serial + Wi-Fi/TCP bridge to SX1262 for pymc_core on RPi.
 //
 // Supported boards (selected at compile time via -DBOARD_<name>):
@@ -251,7 +251,7 @@ enum class Screen : uint8_t { SLEEP = 0, STATUS = 1, RADIO = 2, DIAGNOSTICS = 3 
 static Screen   currentScreen  = Screen::SLEEP;
 static constexpr uint32_t OLED_WAKE_DURATION_MS = 30000;
 static constexpr uint32_t PRG_DEBOUNCE_MS       = 200;
-// pyMC splash holds for at least SPLASH_HOLD_MS while setup() runs Wi-Fi /
+// openHop splash holds for at least SPLASH_HOLD_MS while setup() runs Wi-Fi /
 // Ethernet / radio init in parallel. End-of-setup waits out any remainder.
 static constexpr uint32_t SPLASH_HOLD_MS        = 5000;
 // Boards without a usable PRG/BOOT button (pin_user_button < 0) cycle
@@ -1361,7 +1361,7 @@ void setup() {
         Serial.printf("[BOOT] reset_reason=%d (%s)\n", rr, lbl);
     }
 
-    // Boot splash: show pyMC logo for at least SPLASH_HOLD_MS while the
+    // Boot splash: show openHop logo for at least SPLASH_HOLD_MS while the
     // rest of setup() (Wi-Fi connect, Ethernet bring-up, radio init)
     // proceeds in the background. We just record when it went up;
     // the wait-until-elapsed happens at the end of setup().

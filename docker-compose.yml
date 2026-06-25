@@ -1,4 +1,4 @@
-# pyMC Repeater — pymc_usb / pymc_tcp modem (Wi-Fi/TCP by default, USB-CDC optional)
+# Repeater — pymc_usb / pymc_tcp modem (Wi-Fi/TCP by default, USB-CDC optional)
 #
 # Defaults to pymc_tcp: no USB passthrough, no dialout permissions needed,
 # the modem lives anywhere on the LAN. Switch to pymc_usb by uncommenting
@@ -61,7 +61,7 @@ services:
       # - SERIAL_PORT=/dev/ttyUSB0
 
       # ── Identity / web UI admin ──
-      - NODE_NAME=${NODE_NAME:-pyMC_USB_RPT}
+      - NODE_NAME=${NODE_NAME:-openHop_RPT}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}     # change before exposing the dashboard
 
       # ── Optional radio overrides ──

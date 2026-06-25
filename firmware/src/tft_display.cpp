@@ -51,7 +51,7 @@ static void drawHeader(const char* displayName, const char* version) {
     tft.setTextSize(1);
     tft.setTextColor(COLOUR_BG, COLOUR_HEADER);
     tft.setCursor(2, 3);
-    const char* name = (displayName && *displayName) ? displayName : "pyMC";
+    const char* name = (displayName && *displayName) ? displayName : "openHop";
     tft.print(name);
 
     if (version) {
@@ -124,7 +124,7 @@ void OledDisplay::setStandby(bool on) {
 void OledDisplay::showSplash() {
     if (!_ready) return;
     tft.fillScreen(COLOUR_BG);
-    drawText(8, 18, "pyMC", COLOUR_ACCENT, 3);
+    drawText(8, 18, "openHop", COLOUR_ACCENT, 2);
     drawText(8, 50, BOARD.name, COLOUR_FG, 1);
 }
 
@@ -399,7 +399,7 @@ void OledDisplay::showSplash() {
     tft.fillScreen(COLOUR_BG);
 
     // Splash uses raw 240×135 landscape canvas. Logo on the left,
-    // big "pyMC" + display name on the right.
+    // openHop brand + display name on the right.
     const int16_t logoSrc = SPLASH_LOGO_W;   // 64
     const int16_t logoOut = logoSrc;         // keep at 1x for landscape
     const int16_t x0 = 6;
@@ -417,9 +417,9 @@ void OledDisplay::showSplash() {
 
     int16_t tx = x0 + logoOut + 14;
     tft.setTextColor(COLOUR_ACCENT, COLOUR_BG);
-    tft.setTextSize(3);
-    tft.setCursor(tx, y0 + 14);
-    tft.print("pyMC");
+    tft.setTextSize(2);
+    tft.setCursor(tx, y0 + 16);
+    tft.print("openHop");
 
     if (_displayName[0]) {
         tft.setTextSize(2);

@@ -1,5 +1,5 @@
 # =============================================================================
-# pyMC Repeater + pymc_usb / pymc_tcp modem (Wi-Fi/TCP or USB-CDC)
+# Repeater + pymc_usb / pymc_tcp modem (Wi-Fi/TCP or USB-CDC)
 # https://github.com/itk80/pymc_usb
 #
 # Default transport is pymc_tcp — the modem lives on the LAN and the
@@ -42,7 +42,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Dialout group keeps USB-CDC mode usable when the host passes --device.
 RUN useradd -r -m -s /bin/bash -G dialout repeater
 
-# --- pyMC_Repeater (editable so install.sh can patch in place) ---
+# --- Repeater (editable so install.sh can patch in place) ---
 RUN git clone --depth 1 https://github.com/rightup/pyMC_Repeater.git /opt/pymc_repeater
 
 # --- Python deps. pymc_repeater pulls pymc_core[hardware] which compiles

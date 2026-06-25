@@ -141,7 +141,7 @@ use `303a:1001`.)
 
 ## 3. WiFi configuration (optional, for `pymc_tcp` mode)
 
-On first boot the Heltec starts an open access point `LoRa-Modem-XXXX`.
+On first boot the modem starts an open access point `openHop-Modem-XXXX`.
 Connect a phone/laptop to that AP, open `http://192.168.4.1`, pick your
 Wi-Fi + password, hit **Save & Restart**.
 
@@ -455,7 +455,7 @@ re-stamp the running config.
 | `PYMC_TCP_CONNECT_TIMEOUT`| `5.0`         | Seconds — raise on slow Wi-Fi              |
 | `SERIAL_PORT`             | `/dev/ttyUSB0`| Used when `RADIO_TYPE=pymc_usb`            |
 | `BAUDRATE`                | `921600`      | USB-CDC baudrate (must match firmware)     |
-| `NODE_NAME`               | `pyMC_USB_RPT`| Repeater node name in the mesh             |
+| `NODE_NAME`               | `openHop_RPT` | Repeater node name in the mesh             |
 | `ADMIN_PASSWORD`          | `admin123`    | Web UI admin — change before exposing      |
 | `FREQUENCY`               | `869618000`   | Hz                                         |
 | `TX_POWER`                | `22`          | dBm                                        |
