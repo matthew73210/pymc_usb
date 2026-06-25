@@ -57,25 +57,21 @@ Raspberry Pi                                  openHop Modem
   one via `-DBOARD_<NAME>`. Prebuilt artifacts (ESP32: `bootloader.bin
   / partitions.bin / firmware.bin`; nRF52 T114: `firmware.hex` +
   Adafruit DFU `firmware.zip`) live in `firmware/<env>/`.
-- **`pymc_driver/`** — Python drivers `usb_radio.py` / `tcp_radio.py` +
-  shared `protocol_constants.py`. **Since 2026-05-13 these ship in
-  upstream openHop Core `dev`** ([PR #68](https://github.com/pyMC-dev/pyMC_core/pull/68));
-  newer openHop Core installs pick them up automatically. `test_modem.py`
-  is a standalone pyserial probe that runs without openHop Core.
-- **`patches/`** — reference copies of files vendored into upstreams,
-  kept here so they stay in lockstep with the firmware. Needed only
-  for openHop Core releases that predate PR #68 and for the pending
-  Repeater `radio_type: pymc_tcp / pymc_usb` branch
-  ([Repeater #240](https://github.com/pyMC-dev/pyMC_Repeater/pull/240)).
-- **`scripts/install.sh`** — one-shot installer; idempotent.
+- **`pymc_driver/`** — repo-local Python probe/debug helpers and shared
+  protocol constants. Repeater and openHop Core already include the modem
+  drivers; these files are no longer something users copy into Repeater.
+- **`patches/`** and **`scripts/install.sh`** — legacy/reference material for
+  old pre-integration Repeater/Core installs. Current Repeater releases do
+  not need these side-loaded.
 - **`docker/`** + `docker-compose.yml` — Linux container running
   Repeater that talks to the modem over LAN-TCP by default.
 
 ## Installation
 
-Native install, Docker deployment, firmware flashing (esptool / PlatformIO /
-OTA), Wi-Fi provisioning and the full openHop Core integration steps are
-documented in [INSTALL.md](INSTALL.md).
+Flash supported boards from the browser at <https://flasher.openhop.dev/>.
+[INSTALL.md](INSTALL.md) also covers local esptool/PlatformIO flashing,
+network OTA, Wi-Fi provisioning, and selecting the built-in `pymc_usb` /
+`pymc_tcp` radio types in Repeater. No Repeater side-loading is required.
 
 ## Firmware asset builds
 
