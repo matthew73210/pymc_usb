@@ -9,6 +9,8 @@ bool hasHeltecV43LnaControl();
 bool isFemLnaBypassed();
 bool isExternalLnaEnabled();
 bool setFemLnaBypassed(bool bypass, bool persist);
+void prepareTransmit();
+void prepareReceive();
 uint16_t getAgcResetIntervalSec();
 bool setAgcResetIntervalSec(uint16_t intervalSec, bool persist);
 

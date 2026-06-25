@@ -116,7 +116,7 @@ static void handleRoot() {
     if (RFFrontEnd::hasHeltecV43LnaControl()) {
         html += F("<label><input type='checkbox' name='v43_lna_on' value='1'");
         if (RFFrontEnd::isExternalLnaEnabled()) html += F(" checked");
-        html += F("> Enable Heltec V4.3 external FEM RX LNA <span class='hint'>(unchecked = bypass LNA for lower noise floor)</span></label>");
+        html += F("> Enable Heltec V4.3 external FEM RX LNA <span class='hint'>(RX only; TX always bypasses LNA)</span></label>");
         html += F("<label>agc.reset.interval seconds <span class='hint'>(0 disables; periodically resets AGC during long idle periods)</span><input name='agc_reset_interval_sec' type='number' min='0' max='3600' step='1' value='");
         html += String(RFFrontEnd::getAgcResetIntervalSec());
         html += F("'></label>");

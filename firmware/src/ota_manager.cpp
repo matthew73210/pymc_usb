@@ -828,7 +828,7 @@ static void handleRoot() {
 
     if (RFFrontEnd::hasHeltecV43LnaControl()) {
         body += F("<details open><summary>Heltec V4.3 RF Front-End</summary><div class='inside'>"
-                  "<p>Toggle the KCT8103L external RX LNA. The default/recommended setting bypasses the FEM LNA and keeps SX1262 boosted RX gain enabled for a lower noise floor.</p>"
+                  "<p>Toggle the KCT8103L external RX LNA for receive only. The firmware always bypasses the FEM LNA during transmit so the TX path remains available.</p>"
                   "<form method='POST' action='/rf-lna'>"
                   "<div class='checkline'><input type='checkbox' id='v43_lna_on' name='v43_lna_on' value='1'");
         if (RFFrontEnd::isExternalLnaEnabled()) body += F(" checked");
@@ -1240,7 +1240,7 @@ static void handleRfLnaSave() {
                   httpServer->client().remoteIP().toString().c_str());
 
     String detail = String(enableExternalLna
-                       ? F("The KCT8103L external RX LNA has been enabled.")
+                       ? F("The KCT8103L external RX LNA has been enabled for receive; transmit will still bypass it automatically.")
                        : F("The KCT8103L external RX LNA has been bypassed."));
     detail += String(F(" agc.reset.interval is ")) + String(agcIntervalSec) + F(" seconds (0 disables). Settings persist across reboots.");
     sendSimplePage(enableExternalLna ? F("RF settings saved") : F("RF settings saved"),

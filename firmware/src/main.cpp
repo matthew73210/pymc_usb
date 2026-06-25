@@ -782,6 +782,7 @@ bool startReceive() {
     // which re-runs applyConfig() and then calls this function
     // again with radioStandby=false.
     if (radioStandby) return true;
+    RFFrontEnd::prepareReceive();
     return radio.startReceive() == RADIOLIB_ERR_NONE;
 }
 
@@ -914,6 +915,11 @@ void processHostCommand(uint8_t cmd, const uint8_t* payload, uint16_t len,
                 break;
             }
         }
+
+        // If the operator enabled the V4.3 external RX LNA, it must be
+        // treated as an RX-only state. Restore CTX HIGH before TX so the
+        // KCT8103L front-end leaves the receive-LNA path.
+        RFFrontEnd::prepareTransmit();
 
         dio1Flag = false;
         uint32_t irqStart = dio1IrqCount;
