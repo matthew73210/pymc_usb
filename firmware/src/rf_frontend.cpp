@@ -19,14 +19,21 @@ static constexpr uint16_t MAX_AGC_RESET_INTERVAL_SEC = 3600;
 static bool femLnaBypassed = true;
 static uint16_t agcResetIntervalSec = 0;
 
-static void applyHeltecV43LnaState() {
+static void writeHeltecV43Ctx(bool bypassLna, const char* reason) {
     pinMode(HELTEC_V43_CTX_PIN, OUTPUT);
     // KCT8103L CTX: HIGH = RX LNA bypass, LOW = RX LNA enabled.
-    digitalWrite(HELTEC_V43_CTX_PIN, femLnaBypassed ? HIGH : LOW);
-    Serial.printf("[RF] Heltec V4.3 FEM RX LNA %s (GPIO%d=%s)\n",
-                  femLnaBypassed ? "bypassed" : "enabled",
+    // Keep CTX HIGH for TX regardless of the saved RX-LNA setting; holding
+    // CTX LOW selects the FEM receive-LNA path and can block the TX path.
+    digitalWrite(HELTEC_V43_CTX_PIN, bypassLna ? HIGH : LOW);
+    Serial.printf("[RF] Heltec V4.3 FEM RX LNA %s for %s (GPIO%d=%s)\n",
+                  bypassLna ? "bypassed" : "enabled",
+                  reason ? reason : "state",
                   (int)HELTEC_V43_CTX_PIN,
-                  femLnaBypassed ? "HIGH" : "LOW");
+                  bypassLna ? "HIGH" : "LOW");
+}
+
+static void applyHeltecV43LnaState() {
+    writeHeltecV43Ctx(femLnaBypassed, "RX");
 }
 #endif
 
@@ -86,6 +93,21 @@ bool setFemLnaBypassed(bool bypass, bool persist) {
     (void)bypass;
     (void)persist;
     return false;
+#endif
+}
+
+void prepareTransmit() {
+#if defined(BOARD_HELTEC_V43) && defined(ARDUINO_ARCH_ESP32)
+    // The web UI's "external LNA enabled" setting is RX-only. Always bypass
+    // the FEM RX LNA before TX/CAD-to-TX so KCT8103L does not hold the RF path
+    // in receive-LNA mode.
+    writeHeltecV43Ctx(true, "TX");
+#endif
+}
+
+void prepareReceive() {
+#if defined(BOARD_HELTEC_V43) && defined(ARDUINO_ARCH_ESP32)
+    applyHeltecV43LnaState();
 #endif
 }
 

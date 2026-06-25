@@ -7,8 +7,9 @@
 // its receive LNA because the PA/FEM can raise the receive noise floor.
 // This dedicated openHop modem variant keeps SX1262 boosted RX gain enabled
 // while defaulting KCT8103L CTX high for FEM LNA bypass. The device web UI can
-// toggle CTX low to enable the external RX LNA when an operator wants it, and
-// can set agc.reset.interval for periodic RX AGC resets during long idle time.
+// enable the external RX LNA for receive only; TX always drives CTX high again
+// before transmitting. Operators can also set agc.reset.interval for periodic
+// RX AGC resets during long idle time.
 // =============================================================
 #pragma once
 
