@@ -1,6 +1,6 @@
 // =============================================================
 // w5100s_ethernet_transport.h — RAK13800/W5100S Ethernet transport
-// for nRF52 pyMC_modem targets.
+// for nRF52 openHop Modem targets.
 // =============================================================
 #pragma once
 

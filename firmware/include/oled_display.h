@@ -20,7 +20,7 @@ static constexpr uint16_t OLED_WHITE = SSD1306_WHITE;
 class OledDisplay {
 public:
     void begin();
-    // Boot splash: pyMC logo centered on the panel (64x64 bitmap on a
+    // Boot splash: openHop logo centered on the panel (64x64 bitmap on a
     // 128x64 display, so it lands offset-32 horizontally, 0 vertically).
     // Called immediately after begin(); the rest of setup() (Wi-Fi
     // connect, Ethernet bring-up, radio init) runs while it's visible.

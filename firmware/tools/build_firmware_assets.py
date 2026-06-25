@@ -33,79 +33,79 @@ SELECTED_ENVS_FILE = FIRMWARE / ".selected_firmware_envs"
 # here still build/copy artifacts; they just get conservative defaults.
 ENV_METADATA: dict[str, dict[str, str | bool]] = {
     "heltec_v3": {
-        "name": "Heltec WiFi LoRa 32 V3 pyMC Modem",
+        "name": "Heltec WiFi LoRa 32 V3 openHop Modem",
         "chip_family": "ESP32-S3",
         "web_manifest": True,
     },
     "heltec_v4": {
-        "name": "Heltec WiFi LoRa 32 V4 pyMC Modem",
+        "name": "Heltec WiFi LoRa 32 V4 openHop Modem",
         "chip_family": "ESP32-S3",
         "web_manifest": True,
     },
     "heltec_v42": {
-        "name": "Heltec WiFi LoRa 32 V4.2 pyMC Modem",
+        "name": "Heltec WiFi LoRa 32 V4.2 openHop Modem",
         "chip_family": "ESP32-S3",
         "web_manifest": True,
     },
     "heltec_v43": {
-        "name": "Heltec WiFi LoRa 32 V4.3 pyMC Modem",
+        "name": "Heltec WiFi LoRa 32 V4.3 openHop Modem",
         "chip_family": "ESP32-S3",
         "web_manifest": True,
     },
     "heltec_tracker_v2": {
-        "name": "Heltec Wireless Tracker V2 pyMC Modem",
+        "name": "Heltec Wireless Tracker V2 openHop Modem",
         "chip_family": "ESP32-S3",
         "web_manifest": True,
     },
     "ikoka_stick": {
-        "name": "Ikoka Stick pyMC Modem",
+        "name": "Ikoka Stick openHop Modem",
         "chip_family": "ESP32-S3",
         "web_manifest": True,
     },
     "xiao_wio_sx1262": {
-        "name": "Seeed XIAO Wio-SX1262 pyMC Modem",
+        "name": "Seeed XIAO Wio-SX1262 openHop Modem",
         "chip_family": "ESP32-S3",
         "web_manifest": True,
     },
     "photon_1w_xiao_esp32c6": {
-        "name": "MeshSmith Photon-1W XIAO ESP32-C6 pyMC Modem",
+        "name": "MeshSmith Photon-1W XIAO ESP32-C6 openHop Modem",
         "chip_family": "ESP32-C6",
         "web_manifest": True,
     },
     "rak3112_wismesh": {
-        "name": "RAK3112 WisMesh pyMC Modem",
+        "name": "RAK3112 WisMesh openHop Modem",
         "chip_family": "ESP32-S3",
         "web_manifest": True,
     },
     "station_g2": {
-        "name": "B&Q Consulting Station G2 pyMC Modem",
+        "name": "B&Q Consulting Station G2 openHop Modem",
         "chip_family": "ESP32-S3",
         "web_manifest": True,
     },
     "esp32_p4_nano": {
-        "name": "WaveShare ESP32-P4-Nano pyMC Modem",
+        "name": "WaveShare ESP32-P4-Nano openHop Modem",
         "chip_family": "ESP32-P4",
         # ESP Web Tools support for P4 is still less common; artifacts are
         # staged, but a browser-flasher manifest is deliberately skipped.
         "web_manifest": False,
     },
     "lilygo_t3s3": {
-        "name": "LilyGO T-LoRa T3-S3 pyMC Modem",
+        "name": "LilyGO T-LoRa T3-S3 openHop Modem",
         "chip_family": "ESP32-S3",
         "web_manifest": True,
     },
     "heltec_t114": {
-        "name": "Heltec T114 pyMC Modem",
+        "name": "Heltec T114 openHop Modem",
         "chip_family": "NRF52",
         "web_manifest": False,
     },
     "xiao_nrf52_wio": {
-        "name": "Seeed XIAO nRF52840 Wio-SX1262 pyMC Modem",
+        "name": "Seeed XIAO nRF52840 Wio-SX1262 openHop Modem",
         "chip_family": "NRF52",
         "web_manifest": False,
     },
     "rak4631_wismesh_eth": {
-        "name": "RAK4631 WisMesh Ethernet pyMC Modem",
+        "name": "RAK4631 WisMesh Ethernet openHop Modem",
         "chip_family": "NRF52",
         "web_manifest": False,
     },
@@ -274,7 +274,7 @@ def write_esp_manifest(env: str, dest: Path) -> Path | None:
         return None
     chip_family = str(meta.get("chip_family", "ESP32"))
     manifest = {
-        "name": str(meta.get("name", f"{env} pyMC Modem")),
+        "name": str(meta.get("name", f"{env} openHop Modem")),
         "version": firmware_version(env),
         "new_install_prompt_erase": True,
         "builds": [

@@ -1,4 +1,4 @@
-/* Minimal RAK4631 variant for pyMC_modem. */
+/* Minimal RAK4631 variant for openHop Modem. */
 #include "variant.h"
 #include "wiring_constants.h"
 #include "wiring_digital.h"

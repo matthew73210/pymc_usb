@@ -161,7 +161,7 @@ Accepted top-level fields:
 Notes:
 - fields you omit are left unchanged
 - set `hostname` to `""` to reset to the default MAC-derived hostname
-- set `tcp_token` to `""` to clear the pyMC token
+- set `tcp_token` to `""` to clear the openHop token
 - if `use_static_ip` is `true`, `static_ip`, `subnet`, and `gateway` must be valid
 - a successful request always reboots the modem
 

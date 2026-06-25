@@ -29,7 +29,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 echo "═══════════════════════════════════════════"
-echo "  pymc_usb / pymc_tcp LoRa Modem — Installer"
+echo "  pymc_usb / pymc_tcp openHop Modem — Installer"
 echo "═══════════════════════════════════════════"
 
 # Check root
@@ -584,7 +584,7 @@ fi
 
 # 5c2. Install pymc_console — a richer dashboard from
 # https://github.com/dmduran12/pymc_console-dist that overlays on top
-# of pyMC_Repeater's CherryPy server. Repeater reads `web.web_path`
+# of Repeater's CherryPy server. Repeater reads `web.web_path`
 # from config.yaml and serves whichever directory is pointed there;
 # the default is repeater's own Vue bundle, but we point it at the
 # console bundle for a much nicer UI. The pymc_tcp endpoints we expose
@@ -684,7 +684,7 @@ SETUP_GUARD = "pymc_usb-tcp-setup-panel"
 with open(target) as f:
     content = f.read()
 
-# Different SPAs mount on different roots — pyMC_Repeater's Vue bundle
+# Different SPAs mount on different roots — Repeater's Vue bundle
 # uses #app, pymc_console uses #root. Try both before giving up.
 ANCHOR = None
 for cand in ('<div id="app"></div>', '<div id="root"></div>'):

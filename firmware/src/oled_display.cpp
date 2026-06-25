@@ -84,7 +84,7 @@ void OledDisplay::showBoot(const char* version) {
     _display->setTextSize(1);
     _display->setTextColor(OLED_WHITE);
     _display->setCursor(0, 0);
-    _display->println("LoRa Modem");
+    _display->println("openHop Modem");
     _display->println(version);
     _display->println();
     _display->println("Waiting for host...");

@@ -18,7 +18,7 @@
 //       WB_IO2 enables module power, WB_IO3 resets W5100S,
 //       Ethernet.init(SS) selects WB_SPI_CS.
 //
-// This target intentionally keeps the pyMC wire protocol unchanged and
+// This target intentionally keeps the openHop Modem wire protocol unchanged and
 // exposes it over TCP on W5100S Ethernet. USB-CDC remains available for
 // flashing, recovery and logs.
 //
@@ -109,7 +109,7 @@ inline const BoardConfig BOARD = {
     {},     // wifi_antenna_switch
     true,   // has_network — W5100S Ethernet transport
 
-    // USB-CDC only for the pyMC protocol fallback; Ethernet is primary.
+    // USB-CDC only for the openHop Modem protocol fallback; Ethernet is primary.
     -1,      // pin_protocol_uart_rx
     -1,      // pin_protocol_uart_tx
     921600,  // protocol_uart_baud

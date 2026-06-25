@@ -5,7 +5,7 @@
 // The core board, display, battery, and LoRa pin map match heltec_v4.h.
 // V4.3 swaps the front-end to KCT8103L; recent MeshCore firmware bypasses
 // its receive LNA because the PA/FEM can raise the receive noise floor.
-// This dedicated pyMC modem variant keeps SX1262 boosted RX gain enabled
+// This dedicated openHop modem variant keeps SX1262 boosted RX gain enabled
 // while holding KCT8103L CTX high for FEM LNA bypass.
 // =============================================================
 #pragma once
