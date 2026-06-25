@@ -1,15 +1,11 @@
 // =============================================================
 // main.cpp — openHop Modem (pymc_modem) firmware
-// Serial + Wi-Fi/TCP bridge to SX1262 for pymc_core on RPi.
+// Serial + Wi-Fi/TCP + Ethernet/TCP bridge to SX1262 for openHop Core on RPi.
 //
-// Supported boards (selected at compile time via -DBOARD_<name>):
-//   * Heltec WiFi LoRa 32 V3 (ESP32-S3 + bare SX1262)
-//   * Ikoka Stick (XIAO ESP32-S3 + Ebyte E22P868M30S)
+// Supported boards: see README.md and firmware/include/boards/.
+// Selected at compile time via -DBOARD_<name> in platformio.ini.
 //
-// USB-CDC @ 921600 baud AND/OR TCP on the port configured via NVS.
-// OTA (ArduinoOTA + HTTP) is always-on whenever STA is connected.
-//
-// All MeshCore protocol logic runs on the RPi in pymc_core.
+// All MeshCore protocol logic runs on the host in openHop Core.
 // =============================================================
 
 #include <Arduino.h>
@@ -47,14 +43,23 @@
 #  include "runtime_stats.h"
 #  include "gps_manager.h"
 #else
-// nRF52 (Heltec T114) build: the network / OLED / OTA managers are
-// excluded from the build via platformio.ini's build_src_filter.
-// Provide drop-in stub namespaces + an empty OledDisplay class so
-// the existing call sites in main.cpp compile unchanged. All
-// methods are no-ops and isSTAConnected() / hasIP() / etc. always
-// return false, so the runtime branches that gate on network
-// state simply skip.
+// nRF52 builds exclude the ESP32 Wi-Fi/OTA/display managers via
+// platformio.ini's build_src_filter. Most nRF52 targets are
+// USB/UART-only; RAK4631 enables a separate W5100S Ethernet TCP
+// transport under PYMC_ETHERNET_W5100S. Provide drop-in stub
+// namespaces for the rest so call sites compile unchanged.
 #include <IPAddress.h>
+#if defined(PYMC_ETHERNET_W5100S)
+#  ifndef PYMC_ETH_TCP_PORT
+#    define PYMC_ETH_TCP_PORT 5055
+#  endif
+#  ifndef PYMC_ETH_TOKEN
+#    define PYMC_ETH_TOKEN ""
+#  endif
+#  ifndef PYMC_ETH_HOSTNAME
+#    define PYMC_ETH_HOSTNAME "pymc-rak4631-eth"
+#  endif
+#endif
 namespace WifiManager {
     enum class Mode : uint8_t { OFFLINE = 0, STA_CONNECTING = 1,
                                 STA_CONNECTED = 2, AP_CONFIG = 3 };
@@ -83,12 +88,30 @@ namespace WifiManager {
     inline void  applyWifiAntennaSwitch() {}
     inline const char* getSSID()     { return "---"; }
     inline const char* getIPString() { return "---"; }
+#if defined(PYMC_ETHERNET_W5100S)
+    inline const char* getHostname() { return PYMC_ETH_HOSTNAME; }
+#else
     inline const char* getHostname() { return "---"; }
+#endif
     inline Mode  getMode()           { return Mode::OFFLINE; }
-    inline const Config& getConfig() { static Config c; return c; }
+    inline const Config& getConfig() {
+        static Config c = []() {
+            Config cfg;
+#if defined(PYMC_ETHERNET_W5100S)
+            cfg.hostname = PYMC_ETH_HOSTNAME;
+            cfg.tcpToken = PYMC_ETH_TOKEN;
+            cfg.tcpPort = PYMC_ETH_TCP_PORT;
+#endif
+            return cfg;
+        }();
+        return c;
+    }
     inline void  saveConfig(const Config&) {}
     inline void  factoryReset()      {}
 }
+#if defined(PYMC_ETHERNET_W5100S)
+#  include "w5100s_ethernet_transport.h"
+#else
 namespace TCPServer {
     inline void begin(uint16_t, const String&) {}
     inline void loop() {}
@@ -97,11 +120,13 @@ namespace TCPServer {
     inline void write(const uint8_t*, size_t) {}
     inline String getClientIP() { return String(); }
 }
+#endif
 namespace OTAManager {
     inline void begin(const String&, const String&) {}
     inline void loop() {}
     inline void notifyValidFrame() {}
 }
+#if !defined(PYMC_ETHERNET_W5100S)
 namespace EthernetManager {
     inline void begin(const char* = nullptr,
                       bool = false,
@@ -116,6 +141,7 @@ namespace EthernetManager {
     inline bool hasIP()    { return false; }
     inline const char* getIPString() { return "---"; }
 }
+#endif
 // Per-board display driver on nRF52 boards. T114 ships with an
 // LH114T-IF03 TFT-LCD (ST7789, 135×240); the XIAO nRF52840 +
 // Wio-SX1262 kit ships with no display at all. The class name
@@ -167,6 +193,13 @@ public:
 // SX1262 / E22P pin map comes from BOARD (see boards/<name>.h).
 #if defined(BOARD_PHOTON_1W_XIAO_ESP32C6)
 static SPIClass loraSpi(0);
+PymcSX1262 radio = new Module(BOARD.pin_lora_nss, BOARD.pin_lora_dio1,
+                              BOARD.pin_lora_rst, BOARD.pin_lora_busy,
+                              loraSpi);
+#elif defined(BOARD_RAK4631_WISMESH_ETH)
+// Global SPI is reserved for the RAK13800/W5100S IO-slot bus. The RAK4631
+// internal SX1262 uses a separate nRF52 SPIM instance on P1.11/P1.13/P1.12.
+static SPIClass loraSpi(NRF_SPIM2, 45, 43, 44);  // MISO, SCK, MOSI
 PymcSX1262 radio = new Module(BOARD.pin_lora_nss, BOARD.pin_lora_dio1,
                               BOARD.pin_lora_rst, BOARD.pin_lora_busy,
                               loraSpi);
@@ -605,18 +638,25 @@ static void logRemote(uint8_t level, const char* fmt, ...) {
 static uint16_t buildWifiStatusPayload(uint8_t* out) {
     uint16_t i = 0;
 
+    const bool ethHasIP = EthernetManager::hasIP();
+
     uint8_t mode;
     switch (WifiManager::getMode()) {
         case WifiManager::Mode::STA_CONNECTED:  mode = 2; break;
         case WifiManager::Mode::STA_CONNECTING: mode = 1; break;
         case WifiManager::Mode::AP_CONFIG:      mode = 3; break;
-        default:                                mode = 0; break;
+        default:                                mode = ethHasIP ? 2 : 0; break;
     }
     out[i++] = mode;
 
     IPAddress ip = WifiManager::isSTAConnected() ? WiFi.localIP()
                  : WifiManager::isAPActive()     ? WiFi.softAPIP()
                                                  : IPAddress((uint32_t)0);
+    if (ip == IPAddress((uint32_t)0) && ethHasIP) {
+        if (!ip.fromString(EthernetManager::getIPString())) {
+            ip = IPAddress((uint32_t)0);
+        }
+    }
     out[i++] = ip[0];  // big-endian dotted quad
     out[i++] = ip[1];
     out[i++] = ip[2];
@@ -626,7 +666,9 @@ static uint16_t buildWifiStatusPayload(uint8_t* out) {
     out[i++] = port & 0xFF;
     out[i++] = (port >> 8) & 0xFF;
 
-    const char* ssid = WifiManager::getSSID();
+    const char* ssid = ethHasIP && !WifiManager::isSTAConnected() && !WifiManager::isAPActive()
+        ? "ethernet"
+        : WifiManager::getSSID();
     uint8_t ssid_len = ssid ? (uint8_t)strnlen(ssid, 32) : 0;
     out[i++] = ssid_len;
     if (ssid_len) { memcpy(out + i, ssid, ssid_len); i += ssid_len; }
@@ -1415,10 +1457,14 @@ void setup() {
                       BOARD.pin_lora_mosi, BOARD.pin_lora_nss);
 #endif
 #else
-            // nRF52 BSP: SPI peripheral has fixed pins on its
-            // selected instance. The Heltec T114 variant.h ships
-            // with the SX1262's pins already mapped to SPIM2.
+            // nRF52 BSP: SPI peripheral has fixed pins on its selected
+            // instance. RAK4631 WisMesh uses a dedicated LoRa SPI instance;
+            // global SPI remains the W5100S Ethernet bus.
+#  if defined(BOARD_RAK4631_WISMESH_ETH)
+            loraSpi.begin();
+#  else
             SPI.begin();
+#  endif
 #endif
         }
 
@@ -1487,8 +1533,15 @@ void setup() {
             useEthernet = true;
             Serial.println("[NET] Ethernet link up — Wi-Fi will be skipped");
         } else {
+#if defined(PYMC_ETHERNET_W5100S)
+            // W5100S is the only network path on this nRF52 target. Keep the
+            // transport initialized so loop() can detect a later cable insert
+            // and retry DHCP, rather than permanently disabling Ethernet at boot.
+            Serial.println("[NET] no Ethernet link — keeping W5100S active for link/DHCP retry");
+#else
             Serial.println("[NET] no Ethernet link — falling back to Wi-Fi");
             EthernetManager::end();   // free RMII pins so Wi-Fi can run cleanly
+#endif
         }
     }
 
@@ -1506,7 +1559,11 @@ void setup() {
         // Diagnostic mode (has_wifi == false): ignore the saved token
         // so we can probe the TCP server without re-authenticating.
         // Restore normal auth once Wi-Fi comes back.
+#if defined(PYMC_ETHERNET_W5100S)
+        String token = wcfg.tcpToken;
+#else
         String token = BOARD.has_wifi ? wcfg.tcpToken : String();
+#endif
         uint16_t port = wcfg.tcpPort ? wcfg.tcpPort : 5055;
         TCPServer::begin(port, token);
         tcpStarted = true;
@@ -1669,14 +1726,22 @@ void loop() {
     bool netUp = WifiManager::isSTAConnected() || EthernetManager::hasIP();
     if (!tcpStarted && netUp) {
         const auto& wcfg = WifiManager::getConfig();
+#if defined(PYMC_ETHERNET_W5100S)
+        String token = wcfg.tcpToken;
+#else
         String token = BOARD.has_wifi ? wcfg.tcpToken : String();
+#endif
         uint16_t port = wcfg.tcpPort ? wcfg.tcpPort : 5055;
         TCPServer::begin(port, token);
         tcpStarted = true;
     }
     if (!otaStarted && netUp) {
         const auto& wcfg = WifiManager::getConfig();
+#if defined(PYMC_ETHERNET_W5100S)
+        String token = wcfg.tcpToken;
+#else
         String token = BOARD.has_wifi ? wcfg.tcpToken : String();
+#endif
         OTAManager::begin(deviceHostname, token);
         otaStarted = true;
     }

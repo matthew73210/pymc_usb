@@ -12,6 +12,8 @@ Ethernet) wired LAN.
 |-------------------------------------------------------------------------------------------------------------|------------------------------|----------------------------|----------|
 | **Heltec WiFi LoRa 32 V3**                                                                                  | ESP32-S3                     | bare SX1262                | Wi-Fi    |
 | **Heltec WiFi LoRa 32 V4**                                                                                  | ESP32-S3                     | SX1262 + PA/LNA FEM        | Wi-Fi    |
+| **Heltec WiFi LoRa 32 V4.2**                                                                                | ESP32-S3                     | SX1262 + GC1109 FEM        | Wi-Fi    |
+| **Heltec WiFi LoRa 32 V4.3**                                                                                | ESP32-S3                     | SX1262 + KCT8103L FEM      | Wi-Fi    |
 | **Heltec Wireless Tracker V2**                                                                              | ESP32-S3                     | SX1262 + KCT8103L PA/FEM + TFT 160×80 | Wi-Fi |
 | **Ikoka Stick** ([ndoo/ikoka-stick-meshtastic-device](https://github.com/ndoo/ikoka-stick-meshtastic-device))| XIAO ESP32-S3                | Ebyte E22P868M30S, +30 dBm | Wi-Fi   |
 | **Seeed XIAO Wio-SX1262**                                                                                   | XIAO ESP32-S3                | bare SX1262                | Wi-Fi    |
@@ -21,6 +23,7 @@ Ethernet) wired LAN.
 | **B&Q Consulting Station G2**                                                                                | ESP32-S3                     | SX1262 + 35 dBm PA/LNA     | Wi-Fi    |
 | **WaveShare ESP32-P4-Nano**                                                                                 | ESP32-P4 (RISC-V) + ESP32-C6 | E22 (off-board, optional)  | **Ethernet *or* Wi-Fi** — runtime auto-select: cable plugged → Ethernet wins, no link → fall back to Wi-Fi via C6 SDIO bridge. Both at once is unstable with the radio attached, see [P4-Nano notes](#porting-to-another-esp32-p4-board) |
 | **Heltec T114**                                                                                             | nRF52840                     | bare SX1262 + TFT 135×240  | **none** — USB-CDC + UART only |
+| **RAK4631 WisMesh Ethernet**                                                                                | nRF52840 (RAK4631) + RAK13800/W5100S | SX1262 in-module     | **Ethernet** (W5100S) — TCP port 5055, USB-CDC fallback |
 | **Seeed XIAO nRF52840 + Wio-SX1262**                                                                        | XIAO nRF52840                | bare SX1262                | **none** — USB-CDC only |
 
 Drop-in replacement for `SX1262Radio` in openHop Core — all MeshCore logic
@@ -30,32 +33,36 @@ only the SX1262 physical layer: TX, RX, CAD, LoRa parameter configuration.
 ## Architecture
 
 ```
-                          USB-CDC / WiFi-TCP
+                       USB-CDC / Wi-Fi-TCP / Ethernet-TCP
 Raspberry Pi                                  openHop Modem
 ┌────────────────────┐                        ┌─────────────────┐
 │ Repeater           │◄ USB 921600 ────────►  │ openHop Modem FW│
 │  └─ openHop Core   │                        │  └─ SX1262      │
 │     ├─ USBLoRaRadio│──── OR ──────          │  └─ RadioLib    │
 │     └─ TCPLoRaRadio│◄ TCP 5055 ─────────►   │  └─ OLED / TFT  │
-│                    │                        │  └─ Wi-Fi STA*  │
+│                    │                        │  └─ Wi-Fi / ETH  │
 └────────────────────┘                        └─────────────────┘
-                                              * Wi-Fi on all boards
-                                                except T114 (nRF52,
-                                                USB-CDC + UART only).
+                                              * Wi-Fi on ESP32 boards,
+                                                Ethernet on P4-Nano
+                                                and RAK4631. No network
+                                                on T114/XIAO nRF52 Wio
+                                                (USB-CDC only).
 ```
 
 - **USB mode** — cable, instant, no provisioning; ideal for single-board setups.
-- **Wi-Fi/TCP mode** — no cable; modem can live anywhere on the LAN while the
-  Pi sits elsewhere. Provisioned once via on-device AP portal (open AP
-  `openHop-Modem-XXXX` → `http://192.168.4.1`) or over USB with
-  `USBLoRaRadio.set_wifi_credentials()`.
+- **Network TCP mode** — Wi-Fi/TCP on ESP32 boards, or Ethernet/TCP on wired
+  targets (P4-Nano, RAK4631). Wi-Fi boards are provisioned via AP portal
+  (`openHop-Modem-XXXX` → `http://192.168.4.1`), USB, or their web UI; the TCP
+  token defaults blank/open on fresh firmware and can be set from the web UI on
+  web-enabled builds. The RAK4631 Ethernet variant has no web UI/HTTP stack, so
+  its W5100S TCP defaults live in `PYMC_ETH_*` build flags.
 
 ## Project layout
 
-- **`firmware/`** — PlatformIO tree, twelve envs sharing one source.
+- **`firmware/`** — PlatformIO tree, fifteen envs sharing one source.
   Each board lives in `include/boards/<env>.h`; `platformio.ini` picks
   one via `-DBOARD_<NAME>`. Prebuilt artifacts (ESP32: `bootloader.bin
-  / partitions.bin / firmware.bin`; nRF52 T114: `firmware.hex` +
+  / partitions.bin / firmware.bin`; nRF52: `firmware.hex` +
   Adafruit DFU `firmware.zip`) live in `firmware/<env>/`.
 - **`pymc_driver/`** — repo-local Python probe/debug helpers and shared
   protocol constants. Repeater and openHop Core already include the modem
@@ -106,6 +113,7 @@ Per-board highlights (full pin numbers in the headers, mDNS prefix is
 - **Station G2** — SX1262 + high-power PA/LNA, SH1107 display currently disabled, max SX1262 drive capped at 19 dBm.
 - **WaveShare ESP32-P4-Nano** — RISC-V P4 + C6 + IP101GRI Ethernet PHY + off-board E22, runtime ETH-or-Wi-Fi (never both, see below).
 - **Heltec T114** — nRF52840 + bare SX1262 + ST7789 TFT 135×240, **no Wi-Fi/TCP/network OTA**; USB-CDC + UART transport only, OTA via Adafruit nRF52 DFU (USB) or in-app `CMD_OTA_*` over the protocol transport.
+- **RAK4631 WisMesh Ethernet** — RAK4631 nRF52840 core module + RAK13800 W5100S Ethernet on the WisBlock IO slot. It has its own PlatformIO board JSON and product-specific variant under `firmware/variants/RAK4631_WisMesh_Ethernet/`, separate SPIM instances for Ethernet (SPIM3) and LoRa (SPIM2), no display, no Wi-Fi, and no network OTA (flash via USB/DFU). The TCP server on port 5055 is the primary transport; USB-CDC is available as a fallback. The TCP token defaults blank/open, matching other fresh network firmware. On web-enabled ESP32 builds the token can be changed in the device web UI; this nRF52 Ethernet-only target has no web UI/HTTP stack, so its W5100S TCP token, port, and hostname are currently set by `PYMC_ETH_*` build flags. The hostname is stored for status reporting only — the W5100S library does not support DHCP option 12. Commands that persist state (standby, auto-CAD, display name) are accepted but volatile — there is no LittleFS/NodeState on this target, so they reset on reboot. Display commands (SET_DISPLAY_NAME) succeed as no-op stubs.
 - **Seeed XIAO nRF52840 + Wio-SX1262** (SKU 102010710) — XIAO nRF52840 + bare SX1262 on the Wio-SX1262 carrier, BLE 5.0 hardware unused, **no Wi-Fi/TCP/network OTA**, no display; native USB-CDC transport only, OTA via Adafruit nRF52 DFU (UF2 disk on double-click reset) or in-app `CMD_OTA_*`.
 
 ### E22P RF switch (Ikoka, P4-Nano + E22P)
