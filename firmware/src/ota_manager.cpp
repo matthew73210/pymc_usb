@@ -42,7 +42,7 @@ static uint32_t    sanityDeadline   = 0;
 static bool        sawValidFrame    = false;
 
 static String modemTitle() {
-    return String(BOARD.name) + " LoRa Modem";
+    return String(BOARD.name) + " openHop Modem";
 }
 
 static String currentIPString() {
@@ -674,7 +674,7 @@ static void handleRoot() {
     body += "</p><p><strong>Current connection</strong> ";
     body += clientIP.length() > 0 ? clientIP : String("none");
     body += "</p><div class='chips'><span class='chip'>";
-    body += cfg.tcpToken.length() > 0 ? "pyMC protected" : "pyMC open";
+    body += cfg.tcpToken.length() > 0 ? "openHop protected" : "openHop open";
     body += "</span><span class='chip'>";
     body += cfg.useStaticIP ? "Static network saved" : "DHCP mode";
     body += F("</span></div><p class='m'><a href='/stats'>View stats page</a></p></div>");
@@ -727,14 +727,14 @@ static void handleRoot() {
                   "</form><p class='m'>Applies immediately and persists across reboots.</p></div></details>");
     }
 
-    body += F("<details><summary>pyMC Token</summary><div class='inside'>"
-              "<p>This token must match the <code>token</code> value in pyMC so pyMC can connect to the radio.</p>"
+    body += F("<details><summary>openHop Token</summary><div class='inside'>"
+              "<p>This token must match the <code>token</code> value in openHop so openHop can connect to the radio.</p>"
               "<form method='POST' action='/token'>"
-              "<label>New pyMC token</label>"
+              "<label>New openHop token</label>"
               "<input type='password' name='token' autocomplete='new-password' maxlength='64'>"
-              "<label>Confirm pyMC token</label>"
+              "<label>Confirm openHop token</label>"
               "<input type='password' name='confirm' autocomplete='new-password' maxlength='64'>"
-              "<button type='submit'>Save pyMC token</button>"
+              "<button type='submit'>Save openHop token</button>"
               "</form><p class='m'>Current mode: <span class='chip'>");
     body += cfg.tcpToken.length() > 0 ? "Protected" : "Open";
     body += F("</span>. Leave both fields blank to clear it. Reboot required.</p></div></details>");
@@ -750,7 +750,7 @@ static void handleRoot() {
               "</form><p class='m'>Password changes take effect on the next request.</p></div></details>");
 
     body += F("<details><summary>Wi-Fi Setup Mode</summary><div class='inside'>"
-              "<p>Clear the saved modem configuration and reboot into the open <code>LoRa-Modem-XXXX</code> setup AP.</p>"
+              "<p>Clear the saved modem configuration and reboot into the open <code>openHop-Modem-XXXX</code> setup AP.</p>"
               "<form method='POST' action='/wifi-reset' onsubmit=\"return confirm('Clear saved modem configuration and reboot into Wi-Fi setup AP?');\">"
               "<button class='danger' type='submit'>Enter Wi-Fi Setup Mode</button>"
               "</form><p class='m'>Use this before moving the modem to a different Wi-Fi network.</p></div></details>");
@@ -982,7 +982,7 @@ static void handleWifiReset() {
                   httpServer->client().remoteIP().toString().c_str());
     sendSimplePage(F("Entering Wi-Fi setup mode"),
                    F("Entering Wi-Fi setup mode"),
-                   F("Saved modem configuration is being cleared. The modem will reboot into the open LoRa-Modem setup AP."));
+                   F("Saved modem configuration is being cleared. The modem will reboot into the openHop-Modem setup AP."));
     delay(500);
     WifiManager::factoryReset();   // does not return
 }
@@ -1085,26 +1085,26 @@ static void handleTokenSave() {
     String confirm   = httpServer->arg("confirm");
 
     if (requested.length() > MAX_TCP_TOKEN_LEN) {
-        httpServer->send(400, "text/plain", "pyMC token must be 0-64 characters.\n");
+        httpServer->send(400, "text/plain", "openHop token must be 0-64 characters.\n");
         return;
     }
     if (requested != confirm) {
-        httpServer->send(400, "text/plain", "pyMC token confirmation does not match.\n");
+        httpServer->send(400, "text/plain", "openHop token confirmation does not match.\n");
         return;
     }
 
     cfg.tcpToken = requested;
     WifiManager::saveConfig(cfg);
 
-    Serial.printf("[OTA] pyMC token updated by %s -> %s\n",
+    Serial.printf("[OTA] openHop token updated by %s -> %s\n",
                   httpServer->client().remoteIP().toString().c_str(),
                   requested.length() > 0 ? "set" : "cleared");
 
-    sendSimplePage(F("pyMC token saved"),
-                   F("pyMC token saved"),
+    sendSimplePage(F("openHop token saved"),
+                   F("openHop token saved"),
                    requested.length() > 0
-                       ? F("The modem will reboot now and require the new pyMC token.")
-                       : F("The modem will reboot now and allow open pyMC access again."));
+                       ? F("The modem will reboot now and require the new openHop token.")
+                       : F("The modem will reboot now and allow openHop access without a token again."));
     delay(500);
     ESP.restart();
 }

@@ -1,5 +1,5 @@
 # =============================================================================
-# pyMC Repeater + pymc_usb / pymc_tcp modem (Wi-Fi/TCP or USB-CDC)
+# Repeater + pymc_usb / pymc_tcp modem (Wi-Fi/TCP or USB-CDC)
 # https://github.com/itk80/pymc_usb
 #
 # Default transport is pymc_tcp — the modem lives on the LAN and the
@@ -42,10 +42,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Dialout group keeps USB-CDC mode usable when the host passes --device.
 RUN useradd -r -m -s /bin/bash -G dialout repeater
 
-# --- pyMC_Repeater (editable so install.sh can patch in place) ---
+# --- Repeater ---
 RUN git clone --depth 1 https://github.com/rightup/pyMC_Repeater.git /opt/pymc_repeater
 
-# --- Python deps. pymc_repeater pulls pymc_core[hardware] which compiles
+# --- Python deps. Repeater pulls openHop Core hardware deps, including
 #     spidev from source — needs build-essential above and the cpython
 #     headers shipped under /usr/local/include/python3.12 in this image.
 #     Do NOT swallow errors here: a silent failure leaves the image with
@@ -58,26 +58,9 @@ RUN pip install --no-cache-dir \
     && pip install --no-cache-dir -e /opt/pymc_repeater \
     && python3 -c "import repeater; print('repeater OK at', repeater.__file__)"
 
-# --- Bring the whole repo in so install.sh can find pymc_driver/, patches/,
-#     scripts/ and config.yaml.example using its normal relative paths.
-WORKDIR /tmp/pymc_usb
-COPY pymc_driver/  ./pymc_driver/
-COPY patches/      ./patches/
-COPY scripts/      ./scripts/
-COPY config.yaml.example ./config.yaml.example
-
 # --- Required directories (volumes mount on top of these later). ---
 RUN mkdir -p /etc/pymc_repeater /var/lib/pymc_repeater /var/log/pymc_repeater \
     && chown -R repeater:repeater /etc/pymc_repeater /var/lib/pymc_repeater /var/log/pymc_repeater
-
-# Pre-seed a sentinel config.yaml so install.sh skips its config-installer
-# step (section [4/6]) — we provide our own docker/config.yaml.default below.
-RUN printf "radio_type: pymc_tcp\n" > /etc/pymc_repeater/config.yaml
-
-# --- Run the canonical installer: drivers, config.py, radio-settings.json,
-#     setup_wizard, pymc_tcp panel HTML+endpoints, JWT exemption, sticky link.
-#     systemctl is absent → install.sh's restart block silently skips. ---
-RUN chmod +x scripts/install.sh && scripts/install.sh
 
 # --- Stash the Docker default OUTSIDE /etc/pymc_repeater/ so a host
 #     bind mount over that directory doesn't hide it. The entrypoint

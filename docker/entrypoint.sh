@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# pyMC Repeater container entrypoint
+# Repeater container entrypoint
 #
 # Three responsibilities:
 #   1. If we were started as root (typical when bind-mounted host
@@ -42,7 +42,7 @@ if [ "$(id -u)" = "0" ]; then
 fi
 
 echo "=========================================="
-echo "  pyMC Repeater (Heltec USB / TCP modem)"
+echo "  Repeater (USB / TCP modem)"
 echo "=========================================="
 
 # Seed config from baked-in default on first start (volume / bind mount empty).
@@ -126,7 +126,7 @@ if os.environ.get("PREAMBLE_LENGTH"):  radio["preamble_length"]  = int(os.enviro
 # wizard's effort would be reverted on every container restart and the
 # `needs_setup` indicator would never clear.
 rpt = cfg.setdefault("repeater", {})
-NAME_PLACEHOLDERS = {"", "mesh-repeater-01", "pyMC_USB_RPT", "USB_Repeater"}
+NAME_PLACEHOLDERS = {"", "mesh-repeater-01", "pyMC_USB_RPT", "openHop_RPT", "Repeater", "USB_Repeater"}
 PW_PLACEHOLDERS = {"", "admin123"}
 
 if os.environ.get("NODE_NAME"):

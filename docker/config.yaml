@@ -1,4 +1,4 @@
-# pyMC Repeater — Docker default (pymc_usb / pymc_tcp modem)
+# Repeater — Docker default (pymc_usb / pymc_tcp modem)
 # https://github.com/itk80/pymc_usb
 #
 # This file is baked into the image as /etc/pymc_repeater/config.yaml.default
@@ -12,7 +12,7 @@
 radio_type: pymc_tcp
 
 repeater:
-  node_name: "pyMC_USB_RPT"
+  node_name: "openHop_RPT"
   latitude: 0.0
   longitude: 0.0
   identity_file: null
@@ -108,5 +108,5 @@ web:
   cors_enabled: false
   # Serve the pyMC Console dashboard (https://github.com/dmduran12/pymc_console)
   # which is baked into the image at build time. Comment out to fall back
-  # to pyMC_Repeater's own Vue bundle.
+  # to Repeater's own Vue bundle.
   web_path: /opt/pymc_console/web/html

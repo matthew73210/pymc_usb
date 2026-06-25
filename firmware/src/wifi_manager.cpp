@@ -220,7 +220,7 @@ static void buildAPSsid() {
     uint8_t mac[6];
     WiFi.macAddress(mac);
     char buf[32];
-    snprintf(buf, sizeof(buf), "LoRa-Modem-%02X%02X", mac[4], mac[5]);
+    snprintf(buf, sizeof(buf), "openHop-Modem-%02X%02X", mac[4], mac[5]);
     apSSID = buf;
 }
 

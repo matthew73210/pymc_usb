@@ -27,7 +27,18 @@ The `esp32_p4_nano`, `station_g2`, and `photon_1w_xiao_esp32c6` envs use the
 (pinned in `platformio.ini`) for the Arduino-ESP32 3.x / ESP-IDF 5.x
 toolchain; first build will fetch the platform package once.
 
-### 1a. Prebuilt ESP32-family binaries (no PlatformIO)
+### 1a. Browser flasher (recommended)
+
+Use the openHop browser flasher for supported ESP32-family boards:
+
+<https://flasher.openhop.dev/>
+
+Pick your board, connect it over USB, and choose **Install** / **Update** from
+the browser. Use the manual esptool or PlatformIO flows below only when you are
+building local firmware, recovering a board manually, or using a target that is
+not yet published in the flasher.
+
+### 1b. Prebuilt ESP32-family binaries (no PlatformIO)
 
 ESP32-family `firmware/<env>/` subdirectories ship three flashable artefacts
 each:
@@ -76,7 +87,7 @@ doesn't enter flash mode automatically, hold **BOOT** while plugging in
 USB and release it once `esptool.py` starts. After flashing press
 **RST** or replug USB.
 
-### 1b. Build and flash with PlatformIO
+### 1c. Build and flash with PlatformIO
 
 ```bash
 cd firmware
@@ -89,7 +100,7 @@ double-tap RESET, or hold BOOT while plugging USB. ESP32-P4-Nano
 download mode: hold **BOOT (Key1)**, briefly press **RESET (Key2)**,
 release RESET, release BOOT.
 
-### 1c. OTA over the network (after the first flash, no cable)
+### 1d. OTA over the network (after the first flash, no cable)
 
 Once the board is on the LAN (Wi-Fi STA or Ethernet) and visible via mDNS:
 
@@ -141,12 +152,12 @@ use `303a:1001`.)
 
 ## 3. WiFi configuration (optional, for `pymc_tcp` mode)
 
-On first boot the Heltec starts an open access point `LoRa-Modem-XXXX`.
+On first boot the modem starts an open access point `openHop-Modem-XXXX`.
 Connect a phone/laptop to that AP, open `http://192.168.4.1`, pick your
 Wi-Fi + password, hit **Save & Restart**.
 
-Alternatively — **provisioning over USB** (doesn't require physical access
-to the Heltec):
+Alternatively — **provisioning over USB** (doesn't require access to the
+temporary setup AP):
 
 ```python
 import asyncio
@@ -177,7 +188,7 @@ async def check():
     #  'mdns': 'heltec-abcdef.local', ...}
 ```
 
-## 4. Standalone connection test (no pymc_core)
+## 4. Standalone connection test (without Repeater)
 
 ```bash
 pip install pyserial
@@ -186,133 +197,13 @@ python3 pymc_driver/test_modem.py /dev/ttyUSB0
 
 You should see `PONG`, `CONFIG_RESP`, `STATUS_RESP`, `CAD_RESP`, `TX_DONE`.
 
-## 5. Integration with pymc_core
+## 5. Configure Repeater
 
-### Option A — automatic (recommended): `scripts/install.sh`
+Current Repeater releases include the openHop Modem drivers and know the
+`pymc_usb` and `pymc_tcp` radio types directly. Do **not** copy drivers into
+openHop Core or patch Repeater by hand for normal installs.
 
-One script does everything that sections 5a and 5b describe manually:
-
-```bash
-sudo scripts/install.sh
-```
-
-It will:
-1. Locate the installed `pymc_core` via `python3 -c "import pymc_core"`.
-2. Copy `pymc_driver/usb_radio.py` and `pymc_driver/tcp_radio.py` into
-   `pymc_core/hardware/`.
-3. Verify both modules import cleanly.
-4. Locate `pymc_repeater/config.py` (tries the installed package first,
-   then `/opt/pymc_repeater`, then `/opt/companion/pyMC_Repeater`).
-5. Patch `create_radio()` / `get_radio_for_board()` with the `pymc_usb`
-   and `pymc_tcp` branches — **only if missing** (guard-string checked,
-   so re-running is safe). Each branch also accepts the legacy
-   `usb_heltec` / `tcp_heltec` aliases for backward compatibility.
-6. Back up the original `config.py` with a timestamped `.bak.` suffix
-   before any edit.
-7. Print the next steps (flash firmware, configure `/etc/pymc_repeater/config.yaml`,
-   restart the service).
-
-Re-run the script after every `pip install --upgrade pymc_core` or
-`apt upgrade pymc_repeater` — it will re-copy the drivers and re-patch
-`config.py` if the upgrade overwrote them.
-
-### Option B — manual
-
-If you prefer to apply changes by hand (or to adapt them to a non-standard
-install layout), use sections 5a / 5b below.
-
-### 5a. USB mode (`radio_type: pymc_usb`)
-
-Copy the driver:
-
-```bash
-cp pymc_driver/usb_radio.py /usr/local/lib/python3.13/dist-packages/pymc_core/hardware/usb_radio.py
-# adjust the destination path to match your pymc_core install
-```
-
-Modify `pymc_core/hardware/__init__.py` — reference template in
-`patches/hardware__init__.py`:
-
-```python
-try:
-    from .usb_radio import USBLoRaRadio
-    _USB_AVAILABLE = True
-except ImportError:
-    _USB_AVAILABLE = False
-    USBLoRaRadio = None
-
-if _USB_AVAILABLE:
-    __all__.append("USBLoRaRadio")
-```
-
-Modify `pymc_core/examples/common.py::create_radio()` — reference template
-in `patches/common.py`:
-
-```python
-if radio_type in ("pymc_usb", "usb_heltec"):
-    from pymc_core.hardware.usb_radio import USBLoRaRadio
-    usb_cfg = config.get("pymc_usb") or config.get("usb_heltec") or {}
-    return USBLoRaRadio(
-        port=usb_cfg["port"],
-        baudrate=usb_cfg.get("baudrate", 921600),
-        frequency=config["radio"]["frequency"],
-        bandwidth=config["radio"]["bandwidth"],
-        spreading_factor=config["radio"]["spreading_factor"],
-        coding_rate=config["radio"]["coding_rate"],
-        tx_power=config["radio"]["tx_power"],
-        sync_word=config["radio"].get("sync_word", 0x12),
-        preamble_length=config["radio"].get("preamble_length", 16),
-    )
-```
-
-### 5b. WiFi/TCP mode (`radio_type: pymc_tcp`) — no cable
-
-`TCPLoRaRadio` is **not** part of upstream `pymc_core`. Copy it the same way
-you did `usb_radio.py`:
-
-```bash
-cp pymc_driver/tcp_radio.py /usr/local/lib/python3.13/dist-packages/pymc_core/hardware/tcp_radio.py
-```
-
-Then add a conditional import alongside the USB one in
-`pymc_core/hardware/__init__.py`:
-
-```python
-try:
-    from .tcp_radio import TCPLoRaRadio
-    _TCP_AVAILABLE = True
-except ImportError:
-    _TCP_AVAILABLE = False
-    TCPLoRaRadio = None
-
-if _TCP_AVAILABLE:
-    __all__.append("TCPLoRaRadio")
-```
-
-And a matching branch in `pymc_core/examples/common.py::create_radio()`:
-
-```python
-if radio_type in ("pymc_tcp", "tcp_heltec"):
-    from pymc_core.hardware.tcp_radio import TCPLoRaRadio
-    tcp = config.get("pymc_tcp") or config.get("tcp_heltec") or {}
-    return TCPLoRaRadio(
-        host=tcp["host"],
-        port=int(tcp.get("port", 5055)),
-        token=str(tcp.get("token", "") or ""),
-        connect_timeout=float(tcp.get("connect_timeout", 5.0)),
-        frequency=int(config["radio"]["frequency"]),
-        bandwidth=int(config["radio"]["bandwidth"]),
-        spreading_factor=int(config["radio"]["spreading_factor"]),
-        coding_rate=int(config["radio"]["coding_rate"]),
-        tx_power=int(config["radio"]["tx_power"]),
-        sync_word=int(config["radio"].get("sync_word", 0x12)),
-        preamble_length=int(config["radio"].get("preamble_length", 16)),
-        lbt_enabled=tcp.get("lbt_enabled", True),
-        lbt_max_attempts=int(tcp.get("lbt_max_attempts", 5)),
-    )
-```
-
-Example `/etc/pymc_repeater/config.yaml`:
+Example `/etc/pymc_repeater/config.yaml` for a LAN/Wi-Fi modem:
 
 ```yaml
 radio_type: pymc_tcp
@@ -336,14 +227,22 @@ pymc_tcp:
   connect_timeout: 5.0
   lbt_enabled: true
   lbt_max_attempts: 5
-
-# Alternative — when radio_type is pymc_usb:
-# pymc_usb:
-#   port: /dev/ttyUSB0
-#   baudrate: 921600
-#   lbt_enabled: true
-#   lbt_max_attempts: 5
 ```
+
+USB modem alternative:
+
+```yaml
+radio_type: pymc_usb
+
+pymc_usb:
+  port: /dev/ttyUSB0
+  baudrate: 921600
+  lbt_enabled: true
+  lbt_max_attempts: 5
+```
+
+The old `scripts/install.sh` / `patches/` workflow is kept only as legacy
+reference material for pre-integration Repeater/Core installs.
 
 ## 6. Start the repeater
 
@@ -383,12 +282,10 @@ Retransmitted packet (X bytes, Yms airtime)   ← mesh forwarding is live
 
 ## 8. Docker deployment (alternative to native install)
 
-The image at `docker/Dockerfile` bundles pymc_repeater + pymc_core,
-runs `scripts/install.sh` at build time so all the patches in §5
-(drivers, config.py branches, web setup wizard, pymc_tcp config panel,
-JWT exemption, sticky link) land in the same place as a native install.
-Default transport is `pymc_tcp` — the modem lives on the LAN and the
-container has no need for `--device` or dialout group membership.
+The Docker image runs Repeater with the built-in `pymc_tcp` / `pymc_usb`
+radio support. Default transport is `pymc_tcp` — the modem lives on the LAN and
+the container has no need for `--device` or dialout group membership unless you
+switch to USB mode.
 
 ### Build and run
 
@@ -455,7 +352,7 @@ re-stamp the running config.
 | `PYMC_TCP_CONNECT_TIMEOUT`| `5.0`         | Seconds — raise on slow Wi-Fi              |
 | `SERIAL_PORT`             | `/dev/ttyUSB0`| Used when `RADIO_TYPE=pymc_usb`            |
 | `BAUDRATE`                | `921600`      | USB-CDC baudrate (must match firmware)     |
-| `NODE_NAME`               | `pyMC_USB_RPT`| Repeater node name in the mesh             |
+| `NODE_NAME`               | `openHop_RPT` | Repeater node name in the mesh             |
 | `ADMIN_PASSWORD`          | `admin123`    | Web UI admin — change before exposing      |
 | `FREQUENCY`               | `869618000`   | Hz                                         |
 | `TX_POWER`                | `22`          | dBm                                        |
@@ -495,15 +392,13 @@ on the fly with no service restart.
 
 ## File placement summary
 
-| Source file                    | Destination                                      |
+| Source file                    | Purpose                                          |
 |--------------------------------|--------------------------------------------------|
-| `firmware/*.bin`               | flashed onto the Heltec (esptool or OTA)         |
-| `pymc_driver/usb_radio.py`     | → `pymc_core/hardware/usb_radio.py`              |
-| `pymc_driver/tcp_radio.py`     | → `pymc_core/hardware/tcp_radio.py`              |
-| `patches/hardware__init__.py`  | template for `pymc_core/hardware/__init__.py`    |
-| `patches/common.py`            | template for `pymc_core/examples/common.py`      |
+| `firmware/*.bin`               | Manual flash / OTA artifacts when not using the browser flasher |
+| `pymc_driver/usb_radio.py`     | Standalone local probe/debug helper              |
+| `pymc_driver/tcp_radio.py`     | Standalone local probe/debug helper              |
+| `patches/`                     | Legacy reference material for old installs only  |
 
-Both driver files are self-contained — `usb_radio.py` needs `pyserial`, and
-`tcp_radio.py` uses the Python standard library (`socket`, `threading`,
-`asyncio`) with no extra dependencies. Neither ships with upstream
-`pymc_core`; they live here and get copied into your installed `pymc_core`.
+Current Repeater releases already ship the modem radio support. Users should
+select `radio_type: pymc_usb` or `radio_type: pymc_tcp`; they should not copy
+these files into Repeater/openHop Core for a normal install.

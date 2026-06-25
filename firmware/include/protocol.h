@@ -1,5 +1,5 @@
 // =============================================================
-// protocol.h — Wire protocol for LoRa Modem serial/TCP communication
+// protocol.h — Wire protocol for openHop Modem serial/TCP communication
 // v0.6 — adds CMD_GET_DEBUG / CMD_DEBUG_RESP and ERR_NO_RADIO;
 //        wire format unchanged.
 // v0.7 — sector-array integration set (mostly T114, but works on

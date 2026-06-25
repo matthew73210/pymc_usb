@@ -70,7 +70,7 @@ static void handleRoot() {
     html.reserve(6144);
     html += F("<!DOCTYPE html><html><head><meta charset='utf-8'>"
               "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-              "<title>LoRa Modem Setup</title>"
+              "<title>openHop Modem Setup</title>"
               "<style>"
               "body{font-family:system-ui,sans-serif;max-width:480px;margin:1em auto;padding:0 1em;color:#222}"
               "h1{font-size:1.3em}"
@@ -81,7 +81,7 @@ static void handleRoot() {
               ".hint{color:#666;font-size:.85em;font-weight:400}"
               "hr{margin:2em 0;border:0;border-top:1px solid #ddd}"
               "</style></head><body>");
-    html += F("<h1>LoRa Modem Setup</h1>");
+    html += F("<h1>openHop Modem Setup</h1>");
     html += F("<form method='POST' action='/save'>");
 
     html += F("<label>Wi-Fi SSID</label>");

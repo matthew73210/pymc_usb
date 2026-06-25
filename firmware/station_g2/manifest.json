@@ -1,5 +1,5 @@
 {
-  "name": "B&Q Consulting Station G2 pyMC Modem",
+  "name": "B&Q Consulting Station G2 openHop Modem",
   "version": "v0.8.0-station_g2",
   "new_install_prompt_erase": true,
   "builds": [

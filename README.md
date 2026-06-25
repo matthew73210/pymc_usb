@@ -1,4 +1,4 @@
-# pymc_modem — USB/TCP LoRa Modem for pymc_core
+# openHop Modem (`pymc_modem`) — USB/TCP LoRa modem for openHop Core
 
 Firmware + Python driver that turns a supported ESP32 or nRF52 board
 with an SX1262 front end into a "dumb" LoRa modem controlled from a
@@ -23,7 +23,7 @@ Ethernet) wired LAN.
 | **Heltec T114**                                                                                             | nRF52840                     | bare SX1262 + TFT 135×240  | **none** — USB-CDC + UART only |
 | **Seeed XIAO nRF52840 + Wio-SX1262**                                                                        | XIAO nRF52840                | bare SX1262                | **none** — USB-CDC only |
 
-Drop-in replacement for `SX1262Radio` in pymc_core — all MeshCore logic
+Drop-in replacement for `SX1262Radio` in openHop Core — all MeshCore logic
 (routing, encryption, retransmission) runs on the RPi. The modem handles
 only the SX1262 physical layer: TX, RX, CAD, LoRa parameter configuration.
 
@@ -31,10 +31,10 @@ only the SX1262 physical layer: TX, RX, CAD, LoRa parameter configuration.
 
 ```
                           USB-CDC / WiFi-TCP
-Raspberry Pi                                  pymc_modem modem
+Raspberry Pi                                  openHop Modem
 ┌────────────────────┐                        ┌─────────────────┐
-│ pymc_repeater      │◄ USB 921600 ────────►  │ LoRa Modem FW   │
-│  └─ pymc_core      │                        │  └─ SX1262      │
+│ Repeater           │◄ USB 921600 ────────►  │ openHop Modem FW│
+│  └─ openHop Core   │                        │  └─ SX1262      │
 │     ├─ USBLoRaRadio│──── OR ──────          │  └─ RadioLib    │
 │     └─ TCPLoRaRadio│◄ TCP 5055 ─────────►   │  └─ OLED / TFT  │
 │                    │                        │  └─ Wi-Fi STA*  │
@@ -47,7 +47,7 @@ Raspberry Pi                                  pymc_modem modem
 - **USB mode** — cable, instant, no provisioning; ideal for single-board setups.
 - **Wi-Fi/TCP mode** — no cable; modem can live anywhere on the LAN while the
   Pi sits elsewhere. Provisioned once via on-device AP portal (open AP
-  `LoRa-Modem-XXXX` → `http://192.168.4.1`) or over USB with
+  `openHop-Modem-XXXX` → `http://192.168.4.1`) or over USB with
   `USBLoRaRadio.set_wifi_credentials()`.
 
 ## Project layout
@@ -57,25 +57,21 @@ Raspberry Pi                                  pymc_modem modem
   one via `-DBOARD_<NAME>`. Prebuilt artifacts (ESP32: `bootloader.bin
   / partitions.bin / firmware.bin`; nRF52 T114: `firmware.hex` +
   Adafruit DFU `firmware.zip`) live in `firmware/<env>/`.
-- **`pymc_driver/`** — Python drivers `usb_radio.py` / `tcp_radio.py` +
-  shared `protocol_constants.py`. **Since 2026-05-13 these ship in
-  upstream pyMC_core `dev`** ([PR #68](https://github.com/pyMC-dev/pyMC_core/pull/68));
-  newer pymc_core installs pick them up automatically. `test_modem.py`
-  is a standalone pyserial probe that runs without pymc_core.
-- **`patches/`** — reference copies of files vendored into upstreams,
-  kept here so they stay in lockstep with the firmware. Needed only
-  for pyMC_core releases that predate PR #68 and for the pending
-  pyMC_Repeater `radio_type: pymc_tcp / pymc_usb` branch
-  ([pyMC_Repeater #240](https://github.com/pyMC-dev/pyMC_Repeater/pull/240)).
-- **`scripts/install.sh`** — one-shot installer; idempotent.
+- **`pymc_driver/`** — repo-local Python probe/debug helpers and shared
+  protocol constants. Repeater and openHop Core already include the modem
+  drivers; these files are no longer something users copy into Repeater.
+- **`patches/`** and **`scripts/install.sh`** — legacy/reference material for
+  old pre-integration Repeater/Core installs. Current Repeater releases do
+  not need these side-loaded.
 - **`docker/`** + `docker-compose.yml` — Linux container running
-  pymc_repeater that talks to the modem over LAN-TCP by default.
+  Repeater that talks to the modem over LAN-TCP by default.
 
 ## Installation
 
-Native install, Docker deployment, firmware flashing (esptool / PlatformIO /
-OTA), Wi-Fi provisioning and the full pymc_core integration steps are
-documented in [INSTALL.md](INSTALL.md).
+Flash supported boards from the browser at <https://flasher.openhop.dev/>.
+[INSTALL.md](INSTALL.md) also covers local esptool/PlatformIO flashing,
+network OTA, Wi-Fi provisioning, and selecting the built-in `pymc_usb` /
+`pymc_tcp` radio types in Repeater. No Repeater side-loading is required.
 
 ## Firmware asset builds
 
