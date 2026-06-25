@@ -1,0 +1,62 @@
+{
+  "build": {
+    "arduino": {
+      "ldscript": "nrf52840_s140_v6.ld"
+    },
+    "core": "nRF5",
+    "cpu": "cortex-m4",
+    "extra_flags": "-DARDUINO_RAK4631_WISMESH_ETH -DNRF52840_XXAA",
+    "f_cpu": "64000000L",
+    "hwids": [
+      ["0x239A", "0x8029"],
+      ["0x239A", "0x0029"],
+      ["0x239A", "0x002A"],
+      ["0x239A", "0x802A"]
+    ],
+    "usb_product": "WisMesh-pyMC-Ethernet",
+    "mcu": "nrf52840",
+    "variant": "RAK4631_WisMesh_Ethernet",
+    "bsp": {
+      "name": "adafruit"
+    },
+    "softdevice": {
+      "sd_flags": "-DS140",
+      "sd_name": "s140",
+      "sd_version": "6.1.1",
+      "sd_fwid": "0x00B6"
+    },
+    "bootloader": {
+      "settings_addr": "0xFF000"
+    }
+  },
+  "connectivity": [
+    "bluetooth",
+    "ethernet"
+  ],
+  "debug": {
+    "jlink_device": "nRF52840_xxAA",
+    "svd_path": "nrf52840.svd",
+    "openocd_target": "nrf52.cfg"
+  },
+  "frameworks": [
+    "arduino"
+  ],
+  "name": "RAK4631 WisMesh Ethernet Gateway",
+  "upload": {
+    "maximum_ram_size": 235520,
+    "maximum_size": 815104,
+    "speed": 115200,
+    "protocol": "nrfutil",
+    "protocols": [
+      "jlink",
+      "nrfjprog",
+      "nrfutil",
+      "stlink"
+    ],
+    "use_1200bps_touch": true,
+    "require_upload_port": true,
+    "wait_for_upload_port": true
+  },
+  "url": "https://store.rakwireless.com/products/wismesh-ethernet-gateway",
+  "vendor": "RAKwireless"
+}

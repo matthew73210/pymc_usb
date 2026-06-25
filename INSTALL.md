@@ -11,6 +11,8 @@ your board:
 |---|---|---|---|
 | Heltec WiFi LoRa 32 V3 | `heltec_v3` | `heltec-<mac3>.local` | Wi-Fi |
 | Heltec WiFi LoRa 32 V4 | `heltec_v4` | `heltec-v4-<mac3>.local` | Wi-Fi |
+| Heltec WiFi LoRa 32 V4.2 | `heltec_v42` | `heltec-v42-<mac3>.local` | Wi-Fi |
+| Heltec WiFi LoRa 32 V4.3 | `heltec_v43` | `heltec-v43-<mac3>.local` | Wi-Fi |
 | Heltec Wireless Tracker V2 | `heltec_tracker_v2` | `tracker-v2-<mac3>.local` | Wi-Fi |
 | Ikoka Stick (XIAO ESP32-S3 + E22P868M30S) | `ikoka_stick` | `ikoka-<mac3>.local` | Wi-Fi |
 | Seeed XIAO Wio-SX1262 | `xiao_wio_sx1262` | `xiao-wio-<mac3>.local` | Wi-Fi |
@@ -20,6 +22,7 @@ your board:
 | B&Q Consulting Station G2 | `station_g2` | `station-g2-<mac3>.local` | Wi-Fi |
 | WaveShare ESP32-P4-Nano (+ off-board E22) | `esp32_p4_nano` | `p4nano-<mac3>.local` | **Ethernet or Wi-Fi** (runtime auto-select; cable plugged → ETH, no link → WiFi fallback. Both at once is unstable with radio active — see README "Porting to another ESP32-P4 board") |
 | Heltec T114 | `heltec_t114` | n/a | none — USB-CDC + UART only |
+| RAK4631 WisMesh Ethernet Gateway | `rak4631_wismesh_eth` | n/a (hostname is status-only) | **Ethernet** (W5100S, TCP port 5055) — no mDNS, no network OTA |
 | Seeed XIAO nRF52840 + Wio-SX1262 | `xiao_nrf52_wio` | n/a | none — USB-CDC only |
 
 The `esp32_p4_nano`, `station_g2`, and `photon_1w_xiao_esp32c6` envs use the
@@ -34,11 +37,11 @@ Use the openHop browser flasher for supported ESP32-family boards:
 <https://flasher.openhop.dev/>
 
 Pick your board, connect it over USB, and choose **Install** / **Update** from
-the browser. Use the manual esptool or PlatformIO flows below only when you are
-building local firmware, recovering a board manually, or using a target that is
-not yet published in the flasher.
+the browser. Use the manual esptool, PlatformIO, or nRF52 DFU flows below when
+you are building local firmware, recovering a board manually, or using a target
+that is not yet published in the flasher.
 
-### 1b. Prebuilt ESP32-family binaries (no PlatformIO)
+### 1b. Prebuilt firmware binaries (no PlatformIO)
 
 ESP32-family `firmware/<env>/` subdirectories ship three flashable artefacts
 each:
@@ -49,16 +52,24 @@ each:
 | `firmware/<env>/partitions.bin`   | `0x8000`  | 3 kB   |
 | `firmware/<env>/firmware.bin`     | `0x10000` | ~830 kB|
 
-`<env>` is one of: `heltec_v3`, `heltec_v4`, `heltec_tracker_v2`,
-`ikoka_stick`, `xiao_wio_sx1262`, `photon_1w_xiao_esp32c6`,
+`<env>` is one of: `heltec_v3`, `heltec_v4`, `heltec_v42`, `heltec_v43`,
+`heltec_tracker_v2`, `ikoka_stick`, `xiao_wio_sx1262`, `photon_1w_xiao_esp32c6`,
 `lilygo_t3s3`, `rak3112_wismesh`, `esp32_p4_nano`, or `station_g2`.
+
+nRF52 targets ship `firmware.hex`, `firmware.zip`, and `SHA256SUMS.txt` in
+`firmware/<env>/` after the firmware asset workflow runs. Use the ZIP with
+Adafruit nRF52 DFU, or double-click reset and use the board bootloader flow;
+there are no ESP32-style bootloader/partition offsets for these targets.
+
+`<env>` for nRF52 is one of: `heltec_t114`, `xiao_nrf52_wio`, or
+`rak4631_wismesh_eth`.
 
 ```bash
 pip install esptool
 
 # Full flash (fresh board, first install) — replace the ENV/CHIP pair
 # with the row that matches your board:
-ENV=heltec_v3      ; CHIP=esp32s3   # also for heltec_v4 / heltec_tracker_v2 / ikoka_stick / xiao_wio_sx1262 / lilygo_t3s3 / rak3112_wismesh / station_g2
+ENV=heltec_v3      ; CHIP=esp32s3   # also for heltec_v4 / heltec_v42 / heltec_v43 / heltec_tracker_v2 / ikoka_stick / xiao_wio_sx1262 / lilygo_t3s3 / rak3112_wismesh / station_g2
 # ENV=photon_1w_xiao_esp32c6 ; CHIP=esp32c6
 # ENV=esp32_p4_nano ; CHIP=esp32p4
 
@@ -102,7 +113,14 @@ release RESET, release BOOT.
 
 ### 1d. OTA over the network (after the first flash, no cable)
 
-Once the board is on the LAN (Wi-Fi STA or Ethernet) and visible via mDNS:
+**Only ESP32-family targets with the OTA/HTTP stack** support network
+OTA. nRF52 targets (`heltec_t114`, `xiao_nrf52_wio`, `rak4631_wismesh_eth`)
+must be flashed via USB with `pio run -e <env> -t upload` (Adafruit
+nRF52 DFU). The `rak4631_wismesh_eth` target has Ethernet for openHop TCP
+only — it has no HTTP/OTA stack, and the `OTAManager` stub is a no-op.
+
+Once the board is on the LAN (Wi-Fi STA or Ethernet — ESP32 only) and
+visible via mDNS:
 
 ```bash
 cd firmware
@@ -112,8 +130,8 @@ curl -u admin:password -F firmware=@.pio/build/<env>/firmware.bin \
      http://<env-stem>-<mac3>.local/update
 ```
 
-Hostname stems are listed in §1 (e.g. `heltec`, `heltec-v4`, `tracker-v2`,
-`ikoka`, `xiao-wio`, `photon-c6`, `lilygo-t3s3`, `rak3112`, `station-g2`,
+Hostname stems are listed in §1 (e.g. `heltec`, `heltec-v4`, `heltec-v42`,
+`heltec-v43`, `tracker-v2`, `ikoka`, `xiao-wio`, `photon-c6`, `lilygo-t3s3`, `rak3112`, `station-g2`,
 `p4nano`). The board reboots after upload.
 The HTTP OTA page uses Basic Auth with username `admin` and default
 password `password`; change it from the OTA page after first network boot.
@@ -150,7 +168,16 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 (VID/PID `10c4:ea60` matches the CP2102 on the Heltec V3; for native USB-CDC
 use `303a:1001`.)
 
-## 3. WiFi configuration (optional, for `pymc_tcp` mode)
+## 3. WiFi / TCP configuration (optional, for `pymc_tcp` mode)
+
+> **Security note — network TCP token:** fresh firmware defaults to an empty
+> TCP token, so port 5055 is open to anyone on the same LAN segment until
+> you set one. The firmware still filters non-RFC1918/link-local/loopback
+> source addresses, but on a shared LAN an empty token is only safe on an
+> isolated network. On web-enabled Wi-Fi firmware, set/change the TCP token
+> from the device web UI (or via USB provisioning). The RAK4631 W5100S
+> Ethernet target has no web UI/HTTP stack, so its current token default is
+> the `PYMC_ETH_TOKEN` build flag in `platformio.ini`.
 
 On first boot the modem starts an open access point `openHop-Modem-XXXX`.
 Connect a phone/laptop to that AP, open `http://192.168.4.1`, pick your
