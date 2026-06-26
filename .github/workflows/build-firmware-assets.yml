@@ -133,17 +133,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if command -v pio >/dev/null 2>&1; then
+          if command -v pio >/dev/null 2>&1 && pio --version >/dev/null 2>&1; then
             echo "PIO=$(command -v pio)" >> "$GITHUB_ENV"
             exit 0
           fi
 
-          if [ ! -x "$GITHUB_WORKSPACE/.venv-pio/bin/pio" ]; then
+          pio_path="$GITHUB_WORKSPACE/.venv-pio/bin/pio"
+          if [ ! -x "$pio_path" ] || ! "$pio_path" --version >/dev/null 2>&1; then
+            rm -rf "$GITHUB_WORKSPACE/.venv-pio"
             python -m venv "$GITHUB_WORKSPACE/.venv-pio"
             "$GITHUB_WORKSPACE/.venv-pio/bin/python" -m pip install --upgrade pip
             "$GITHUB_WORKSPACE/.venv-pio/bin/python" -m pip install platformio
           fi
-          echo "PIO=$GITHUB_WORKSPACE/.venv-pio/bin/pio" >> "$GITHUB_ENV"
+          "$pio_path" --version
+          echo "PIO=$pio_path" >> "$GITHUB_ENV"
 
       - name: Build and stage firmware assets
         shell: bash
@@ -280,17 +283,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if command -v pio >/dev/null 2>&1; then
+          if command -v pio >/dev/null 2>&1 && pio --version >/dev/null 2>&1; then
             echo "PIO=$(command -v pio)" >> "$GITHUB_ENV"
             exit 0
           fi
 
-          if [ ! -x "$GITHUB_WORKSPACE/.venv-pio/bin/pio" ]; then
+          pio_path="$GITHUB_WORKSPACE/.venv-pio/bin/pio"
+          if [ ! -x "$pio_path" ] || ! "$pio_path" --version >/dev/null 2>&1; then
+            rm -rf "$GITHUB_WORKSPACE/.venv-pio"
             python -m venv "$GITHUB_WORKSPACE/.venv-pio"
             "$GITHUB_WORKSPACE/.venv-pio/bin/python" -m pip install --upgrade pip
             "$GITHUB_WORKSPACE/.venv-pio/bin/python" -m pip install platformio
           fi
-          echo "PIO=$GITHUB_WORKSPACE/.venv-pio/bin/pio" >> "$GITHUB_ENV"
+          "$pio_path" --version
+          echo "PIO=$pio_path" >> "$GITHUB_ENV"
 
       - name: Build selected firmware assets without artifact upload
         shell: bash
